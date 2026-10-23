@@ -44,7 +44,7 @@ Copy these into an issue or the design doc's open questions.
 | Packet size | `M0: link up, packet size N bytes` (the protocol wants at least 172) |
 | Did the link hold for 30 min with the screen off? | Any `M0: link down after` lines, and their reasons |
 | Were messages received with the screen off? | Channel and DM lines timed during the test |
-| Watch battery used | `M0: watch battery N%` every 5 minutes |
+| Watch battery used | `M0: watch battery N%`, logged with each radio battery read (about every 5 minutes) |
 | Dictation offline: did it work, how long, how accurate? | `M0 dictation` lines with `network: none` |
 | Dictation online, for comparison | `M0 dictation` lines with `network: Wi-Fi` |
 | Radio firmware and model | `Radio:` lines at connect |
@@ -52,5 +52,5 @@ Copy these into an issue or the design doc's open questions.
 ## Known limits of the spike
 
 - One radio, remembered on the watch; scanning again replaces it.
-- After a drop it reconnects after 30 s, then 60, 120, 240 and every 5 minutes after that. It does not give up while the service runs.
+- After a drop it reconnects after 30 s, then 60, 120, 240 and every 5 minutes after that. It does not give up while the service runs. These pauses use a Handler delay, whose clock stops while the watch sleeps, so with the screen off a reconnect can come much later than that. The real app must time reconnects by the wall clock or an alarm.
 - No messages are kept beyond the log, and none are sent.

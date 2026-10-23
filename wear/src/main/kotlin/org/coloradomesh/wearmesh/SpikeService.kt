@@ -29,8 +29,10 @@ import org.coloradomesh.wearmesh.ble.RadioSession
  * it sends nothing on the mesh.
  *
  * When the link drops it reconnects with a growing pause (30 s doubling up to 5 min) and logs how
- * long each link lasted. Every [BATTERY_LOG_MS] it logs the watch's own battery, which is what the
- * M0 battery measurement is read from.
+ * long each link lasted. Each time the protocol client reads the radio's battery (about every
+ * 5 minutes by the wall clock) it logs the watch's own battery too, which is what the M0 battery
+ * measurement is read from. A Handler timer would not do: its clock stops while the watch sleeps,
+ * so with the screen off it hardly ever fires.
  *
  * All state is kept on the main thread; callbacks from the link and the protocol client are posted
  * there first.
@@ -72,8 +74,6 @@ class SpikeService : Service() {
                 session = null
                 SpikeState.update { SpikeState.Snapshot(running = true, link = "Connecting…") }
                 SpikeLog.log("M0: connecting to $target; watch battery ${watchBattery()}%")
-                main.removeCallbacks(batteryLogger)
-                main.postDelayed(batteryLogger, BATTERY_LOG_MS)
                 openSession()
             }
             ACTION_STOP -> {
@@ -144,14 +144,6 @@ class SpikeService : Service() {
         stopSelf()
     }
 
-    private val batteryLogger = object : Runnable {
-        override fun run() {
-            val link = if (session != null && linkUpAt > 0) "link up" else "link down"
-            SpikeLog.log("M0: watch battery ${watchBattery()}%, $link")
-            main.postDelayed(this, BATTERY_LOG_MS)
-        }
-    }
-
     private fun watchBattery(): Int =
         getSystemService(BatteryManager::class.java).getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
 
@@ -218,6 +210,7 @@ class SpikeService : Service() {
 
         override fun onBattery(millivolts: Int) {
             if (millivolts > 0) SpikeLog.log("Radio battery: $millivolts mV")
+            SpikeLog.log("M0: watch battery ${watchBattery()}%")
             SpikeState.update { it.copy(radioMillivolts = millivolts.takeIf { mv -> mv > 0 }) }
         }
     }
@@ -239,7 +232,6 @@ class SpikeService : Service() {
         private const val EXTRA_ADDRESS = "address"
         private const val CHANNEL_ID = "link"
         private const val NOTIFICATION_ID = 1
-        private const val BATTERY_LOG_MS = 5 * 60_000L
         private const val RECONNECT_FIRST_MS = 30_000L
         private const val RECONNECT_MAX_MS = 5 * 60_000L
 

@@ -154,10 +154,12 @@ The biggest unknown is BLE behavior on the Pixel Watch 5, tested in the first mi
 
 - [x] One client: the watch is the radio's only client while connected; no multi-client support.
 - [x] Target watch: Pixel Watch 5 first.
-- [x] Dictation: possibly good enough as a primary input; confirm on Pixel Watch 5 in M0.
+- [x] Dictation: works offline on the Pixel Watch 5 (M0); it needs a confirmation tap before the text is returned.
 - [x] Direct messages to known contacts are in v1.
 - [x] Repository: wearmesh, within Colorado Mesh, same licensing as MeshCore TAK Bridge.
-- [ ] Which MTU does the Pixel Watch 5 negotiate, and do any frames exceed it?
+- [x] Packet size: the Pixel Watch 5 gets 244 bytes (MTU 247), above the 172 the protocol needs, so every frame fits (M0).
+- [x] Screen off: the link held for 31 minutes and messages arrived live (M0).
+- [ ] Watch battery drain in Live mode (needs a run of an hour or more with the fixed battery log)
 
 ## Milestones and testing plan
 
@@ -171,6 +173,22 @@ Four milestones, each ending in a go/no-go check; the first is a throwaway spike
    - Exit: one full day of carry with Check-in, battery drain measured.
 4. **M3 — Messaging.** Reply screen with quick replies, dictation, keyboard; direct messages to known contacts; Live mode; Tile and complication.
    - Exit: field test with the Colorado mesh, messages round-trip with a phone client on another radio.
+
+**M0 results (23 October 2026)**
+
+| Check | Result |
+| --- | --- |
+| Pair and connect | Worked on the Pixel Watch 5 |
+| Packet size | 244 bytes (MTU 247); the protocol needs 172 |
+| Radio | Heltec Mesh Node T1, firmware 1.17.7-zephcore (10 Oct 2026), 40 channel slots, 15 programmed (slot 7 empty), 351 contacts |
+| Screen off | Passed: link held 31 minutes with no drops; 35 channel messages arrived live, 3 to 30 s after sending |
+| Dictation, Wi-Fi | Result in 7.6 s |
+| Dictation, no network | Transcribed on the watch; needs a confirmation tap to return the text |
+| Battery | Not yet measured: the spike's 5-minute watch battery log never fired (fixed; see below) |
+
+The radio's 40 slots with a gap at slot 7 confirm the rule to read every slot the radio reports. Because offline dictation needs a confirmation tap, the reply flow in M3 should expect it.
+
+Lesson for M2: the battery log used a Handler delay, whose clock stops while the watch sleeps, so with the screen off it never fired; the radio battery reads, timed by the wall clock on each protocol tick, kept coming every 5 minutes. Anything timed in the background (Check-in intervals, reconnect pauses) must use the wall clock or an alarm, not Handler delays. The same run shows the watch sleeping between radio events, which is good for battery.
 
 **Testing**
 
