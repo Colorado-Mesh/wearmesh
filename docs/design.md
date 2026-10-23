@@ -158,8 +158,8 @@ The biggest unknown is BLE behavior on the Pixel Watch 5, tested in the first mi
 - [x] Direct messages to known contacts are in v1.
 - [x] Repository: wearmesh, within Colorado Mesh, same licensing as MeshCore TAK Bridge.
 - [x] Packet size: the Pixel Watch 5 gets 244 bytes (MTU 247), above the 172 the protocol needs, so every frame fits (M0).
-- [x] Screen off: the link held for 31 minutes and messages arrived live (M0).
-- [ ] Watch battery drain in Live mode: first estimate about 4% per hour; confirm with a run of an hour or more with the fixed battery log
+- [x] Screen off: the link held for 31 and 95 minutes and messages arrived live (M0).
+- [x] Watch battery in Live mode: about 2.3% per hour, roughly 40 hours from full (M0).
 
 ## Milestones and testing plan
 
@@ -174,21 +174,23 @@ Four milestones, each ending in a go/no-go check; the first is a throwaway spike
 4. **M3 — Messaging.** Reply screen with quick replies, dictation, keyboard; direct messages to known contacts; Live mode; Tile and complication.
    - Exit: field test with the Colorado mesh, messages round-trip with a phone client on another radio.
 
-**M0 results (23 October 2026)**
+**M0 results (23 October 2026): complete**
 
 | Check | Result |
 | --- | --- |
 | Pair and connect | Worked on the Pixel Watch 5 |
 | Packet size | 244 bytes (MTU 247); the protocol needs 172 |
 | Radio | Heltec Mesh Node T1, firmware 1.17.7-zephcore (10 Oct 2026), 40 channel slots, 15 programmed (slot 7 empty), 351 contacts |
-| Screen off | Passed: link held 31 minutes with no drops; 35 channel messages arrived live, 3 to 30 s after sending |
+| Screen off | Passed: link held 31 minutes and then 95 minutes with no drops; messages arrived live, 3 to 30 s after sending |
 | Dictation, Wi-Fi | Result in 7.6 s |
 | Dictation, no network | Transcribed on the watch; needs a confirmation tap to return the text |
-| Battery | First estimate: 99% to 97% over 31 minutes in Live mode, about 4% per hour (roughly 3 to 6% given whole-percent readings), so about a day with the link always up. The spike's 5-minute watch battery log never fired (fixed; see below) |
+| Battery | About 2.3% per hour in Live mode (97% to 93% over a 95-minute run; 3 points in about 78 minutes between readings), so about 40 hours from full with the link always up and normal watch use. The first, 31-minute estimate of 4% per hour was too coarse |
 
 The radio's 40 slots with a gap at slot 7 confirm the rule to read every slot the radio reports. Because offline dictation needs a confirmation tap, the reply flow in M3 should expect it.
 
-Lesson for M2: the battery log used a Handler delay, whose clock stops while the watch sleeps, so with the screen off it never fired; the radio battery reads, timed by the wall clock on each protocol tick, kept coming every 5 minutes. Anything timed in the background (Check-in intervals, reconnect pauses) must use the wall clock or an alarm, not Handler delays. The same run shows the watch sleeping between radio events, which is good for battery.
+On connecting, the watch collected 13 messages that had queued on the radio while it was away, the oldest 7 minutes old, then switched to live delivery, as the Check-in design expects.
+
+Lesson for M2: the spike's first battery log used a Handler delay, whose clock stops while the watch sleeps, so with the screen off it never fired; the radio battery reads, timed by the wall clock on each protocol tick, kept coming every 5 minutes. Anything timed in the background (Check-in intervals, reconnect pauses) must use the wall clock or an alarm, not Handler delays. The same run shows the watch sleeping between radio events, which is good for battery.
 
 **Testing**
 
