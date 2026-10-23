@@ -159,7 +159,7 @@ The biggest unknown is BLE behavior on the Pixel Watch 5, tested in the first mi
 - [x] Repository: wearmesh, within Colorado Mesh, same licensing as MeshCore TAK Bridge.
 - [x] Packet size: the Pixel Watch 5 gets 244 bytes (MTU 247), above the 172 the protocol needs, so every frame fits (M0).
 - [x] Screen off: the link held for 31 minutes and messages arrived live (M0).
-- [ ] Watch battery drain in Live mode (needs a run of an hour or more with the fixed battery log)
+- [ ] Watch battery drain in Live mode: first estimate about 4% per hour; confirm with a run of an hour or more with the fixed battery log
 
 ## Milestones and testing plan
 
@@ -184,7 +184,7 @@ Four milestones, each ending in a go/no-go check; the first is a throwaway spike
 | Screen off | Passed: link held 31 minutes with no drops; 35 channel messages arrived live, 3 to 30 s after sending |
 | Dictation, Wi-Fi | Result in 7.6 s |
 | Dictation, no network | Transcribed on the watch; needs a confirmation tap to return the text |
-| Battery | Not yet measured: the spike's 5-minute watch battery log never fired (fixed; see below) |
+| Battery | First estimate: 99% to 97% over 31 minutes in Live mode, about 4% per hour (roughly 3 to 6% given whole-percent readings), so about a day with the link always up. The spike's 5-minute watch battery log never fired (fixed; see below) |
 
 The radio's 40 slots with a gap at slot 7 confirm the rule to read every slot the radio reports. Because offline dictation needs a confirmation tap, the reply flow in M3 should expect it.
 
