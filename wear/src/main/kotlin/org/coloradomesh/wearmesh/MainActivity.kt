@@ -37,8 +37,8 @@ import androidx.wear.compose.material.PositionIndicator
 import androidx.wear.compose.material.Scaffold
 import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
-import org.coloradomesh.wearmesh.ble.FoundRadio
-import org.coloradomesh.wearmesh.ble.RadioScanner
+import org.coloradomesh.meshcore.ble.FoundRadio
+import org.coloradomesh.meshcore.ble.RadioScanner
 
 /**
  * The M0 spike's one screen: find and pick a radio, connect or disconnect, test dictation, and

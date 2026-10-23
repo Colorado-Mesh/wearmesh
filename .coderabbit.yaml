@@ -47,25 +47,13 @@ reviews:
         When a pull request changes behaviour, check that docs/design.md, docs/M0-spike.md and
         the README are updated to match.
 
-    - path: "protocol/**"
+    - path: "meshcore-kotlin"
       instructions: |
-        MeshCore companion protocol, copied from MeshCore TAK Bridge (see protocol/README.md)
-        until milestone M1 makes it one shared module. Any change here should also go to the
-        bridge, or say why not; flag changes that make the two copies drift without a note.
-        Everything from the radio is untrusted: check every length and offset before reading,
-        and never let a malformed frame throw out of the client. One command is outstanding at
-        a time, each with a time limit; check that a queued command cannot stall the queue.
-        Flag any command that sets, adds, removes or resets state on the radio. Undocumented
-        layouts come from the MeshCore firmware source (MyMesh.cpp, BaseChatMesh.cpp); ask for
-        a reference when a new one appears.
-
-    - path: "wear/src/main/kotlin/**/ble/**"
-      instructions: |
-        Bluetooth LE link to the radio, adapted from MeshCore TAK Bridge. All work runs on the
-        link's own handler thread. Check that each step clears its time limit, that close() is
-        safe to call more than once, that callbacks from a superseded connection attempt are
-        ignored, and that a failure always ends in onClosed with a reason. A first connection
-        often fails with status 133 on Android, which is why connecting is retried.
+        A git submodule: the MeshCore protocol and Bluetooth link, shared with MeshCore TAK
+        Bridge and reviewed in Colorado-Mesh/meshcore-kotlin. Here only its pinned commit
+        changes. Check that a pull request moving it says what changed there and why WearMesh
+        needs it, and that the watch's use of any changed API (RadioSession, CompanionClient)
+        still fits.
 
     - path: "wear/src/main/**"
       instructions: |
@@ -77,12 +65,6 @@ reviews:
         thread or a thread-safe holder; Compose reads state only from flows. Flag work that
         blocks a listener callback (the protocol client holds its lock while calling them).
         Layouts must suit a small round screen and one-handed use.
-
-    - path: "**/src/test/**"
-      instructions: |
-        JUnit tests for the plain-Kotlin protocol module. Prefer tests of behaviour with recorded
-        frames. Flag tests that depend on timing (fixed sleeps) or on the order of hash-based
-        collections.
 
     - path: ".github/workflows/**"
       instructions: |
@@ -129,7 +111,11 @@ chat:
 
 knowledge_base:
   linked_repositories:
+    - repository: "Colorado-Mesh/meshcore-kotlin"
+      instructions: >-
+        The shared protocol and Bluetooth code, included here as a submodule. Its README says
+        how the apps use it.
     - repository: "Colorado-Mesh/meshcore-tak-bridge"
       instructions: >-
-        The phone app WearMesh shares its protocol module and Bluetooth link with. Fixes to
-        protocol/ or the ble/ classes in either repository usually apply to the other.
+        The phone app that shares meshcore-kotlin with WearMesh. What it learned about radios
+        and Android Bluetooth is in its docs/DESIGN.md and docs/STATUS.md.

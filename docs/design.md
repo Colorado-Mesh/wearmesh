@@ -6,7 +6,7 @@ October 22, 2026 · Bud Talbot
 
 Build WearMesh, a standalone Wear OS app that connects directly to a MeshCore BLE companion radio and handles channel and direct messaging, with no phone in the loop. The watch replaces the phone as the companion's client: it reads channels and contacts from the radio, syncs queued messages, shows them, and sends short replies.
 
-The official MeshCore app is closed-source, so this is a new client. It is written in native Kotlin with Compose for Wear OS, and its companion-protocol layer is a shared module with MeshCore TAK Bridge. It lives in the wearmesh repository within Colorado Mesh, under the same licensing as the bridge app.
+The official MeshCore app is closed-source, so this is a new client. It is written in native Kotlin with Compose for Wear OS, and its companion-protocol layer and Bluetooth link are shared with MeshCore TAK Bridge through the meshcore-kotlin repository, a git submodule in both apps. It lives in the wearmesh repository within Colorado Mesh, under the same licensing as the bridge app.
 
 ## Goals and non-goals
 
@@ -169,6 +169,7 @@ Four milestones, each ending in a go/no-go check; the first is a throwaway spike
    - Exit: works on the Pixel Watch 5 with the screen off for 30 minutes; MTU recorded; on-device dictation quality checked.
 2. **M1 — Shared protocol module.** Extract frame encode/decode, command queue, and response parsing from MeshCore TAK Bridge into a pure-Kotlin module with unit tests from captured frames.
    - Exit: both apps build against it; tests cover legacy and V3 message frames.
+   - Done 23 October 2026: [meshcore-kotlin](https://github.com/Colorado-Mesh/meshcore-kotlin) holds `protocol` (pure Kotlin, with the bridge's tests plus new ones, covering legacy and V3 channel and direct messages) and `ble` (the Bluetooth link, scanner and session), in packages `org.coloradomesh.meshcore.*`. Both apps include it as a git submodule and build it from source with `includeBuild`.
 3. **M2 — Read-only client.** Channel list, channel view, notifications, Check-in mode.
    - Exit: one full day of carry with Check-in, battery drain measured.
 4. **M3 — Messaging.** Reply screen with quick replies, dictation, keyboard; direct messages to known contacts; Live mode; Tile and complication.

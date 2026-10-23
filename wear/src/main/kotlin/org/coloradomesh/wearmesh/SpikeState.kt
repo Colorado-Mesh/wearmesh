@@ -3,7 +3,7 @@ package org.coloradomesh.wearmesh
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
-import org.coloradomesh.takbridge.protocol.Channel
+import org.coloradomesh.meshcore.protocol.Channel
 
 /** What the screen shows about the radio link. Written by [SpikeService], read by [MainActivity]. */
 object SpikeState {

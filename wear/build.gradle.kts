@@ -38,7 +38,8 @@ kotlin {
 }
 
 dependencies {
-    implementation(project(":protocol"))
+    // The shared Bluetooth link and session; brings in org.coloradomesh.meshcore:protocol too.
+    implementation("org.coloradomesh.meshcore:ble")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
