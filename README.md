@@ -2,7 +2,7 @@
 
 A standalone Wear OS app for [MeshCore](https://docs.meshcore.io/) messaging from the wrist. The watch connects straight to a MeshCore companion radio over Bluetooth, with no phone in the loop, and handles channel and direct messages.
 
-It is a [Colorado Mesh](https://coloradomesh.org/) project. Its protocol code is shared with [MeshCore TAK Bridge](https://github.com/Colorado-Mesh/meshcore-tak-bridge). How it is meant to work, and the plan, are in [docs/design.md](docs/design.md).
+It is a [Colorado Mesh](https://coloradomesh.org/) project. Its protocol and Bluetooth code is shared with [MeshCore TAK Bridge](https://github.com/Colorado-Mesh/meshcore-tak-bridge) through [meshcore-kotlin](https://github.com/Colorado-Mesh/meshcore-kotlin), included here as a git submodule. How it is meant to work, and the plan, are in [docs/design.md](docs/design.md).
 
 ## Status
 
@@ -14,18 +14,28 @@ The first target watch is the Pixel Watch 5. How to run the M0 tests and what to
 
 | Folder | What it holds |
 | --- | --- |
-| `protocol/` | The companion protocol in pure Kotlin, with JVM tests; copied from MeshCore TAK Bridge for now ([protocol/README.md](protocol/README.md)) |
-| `wear/` | The Wear OS app: the M0 spike screen, its foreground service, and the Bluetooth link |
+| `meshcore-kotlin/` | A git submodule: the companion protocol in pure Kotlin, with its tests, and the Bluetooth link, shared with MeshCore TAK Bridge |
+| `wear/` | The Wear OS app: the M0 spike screen and its foreground service |
 | `docs/` | The design proposal and the M0 test procedure |
 
 ## Build
 
-Open the folder in Android Studio, or from a terminal:
+The shared code is a submodule, so clone with it:
 
 ```bash
-./gradlew :protocol:test        # protocol unit tests
-./gradlew :wear:assembleDebug   # wear/build/outputs/apk/debug/wear-debug.apk
+git clone --recurse-submodules https://github.com/Colorado-Mesh/wearmesh.git
+# or, in a clone made without it:
+git submodule update --init
 ```
+
+Then open the folder in Android Studio, or from a terminal:
+
+```bash
+./gradlew :wear:assembleDebug                    # wear/build/outputs/apk/debug/wear-debug.apk
+./gradlew -p meshcore-kotlin :protocol:test      # the shared protocol's unit tests
+```
+
+To move to a newer version of the shared code: `git -C meshcore-kotlin pull origin main`, then commit the submodule change.
 
 Install on a watch with wireless debugging on (Settings, Developer options, Wireless debugging):
 

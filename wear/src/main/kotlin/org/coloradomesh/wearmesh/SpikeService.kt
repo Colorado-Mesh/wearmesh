@@ -14,14 +14,14 @@ import android.os.Looper
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
-import org.coloradomesh.takbridge.protocol.Channel
-import org.coloradomesh.takbridge.protocol.ChannelMessage
-import org.coloradomesh.takbridge.protocol.CompanionClient
-import org.coloradomesh.takbridge.protocol.Contact
-import org.coloradomesh.takbridge.protocol.DeviceInfo
-import org.coloradomesh.takbridge.protocol.DirectMessage
-import org.coloradomesh.takbridge.protocol.SelfInfo
-import org.coloradomesh.wearmesh.ble.RadioSession
+import org.coloradomesh.meshcore.ble.RadioSession
+import org.coloradomesh.meshcore.protocol.Channel
+import org.coloradomesh.meshcore.protocol.ChannelMessage
+import org.coloradomesh.meshcore.protocol.CompanionClient
+import org.coloradomesh.meshcore.protocol.Contact
+import org.coloradomesh.meshcore.protocol.DeviceInfo
+import org.coloradomesh.meshcore.protocol.DirectMessage
+import org.coloradomesh.meshcore.protocol.SelfInfo
 
 /**
  * M0 spike: holds one link to a companion radio in a connectedDevice foreground service, so it
@@ -101,6 +101,8 @@ class SpikeService : Service() {
             context = this,
             address = target,
             listener = listener,
+            appName = APP_NAME,
+            onLog = { SpikeLog.log("Link: $it") },
             onLinkReady = { size -> main.post { if (mine == generation) linkReady(size) } },
             onClosed = { reason -> main.post { if (mine == generation) linkClosed(reason) } },
         )
@@ -234,6 +236,9 @@ class SpikeService : Service() {
         private const val NOTIFICATION_ID = 1
         private const val RECONNECT_FIRST_MS = 30_000L
         private const val RECONNECT_MAX_MS = 5 * 60_000L
+
+        /** The name the watch gives the radio when it says hello. */
+        private const val APP_NAME = "WearMesh"
 
         /** Call only once Bluetooth permission is granted and the app is on screen. */
         fun connect(context: Context, address: String) {

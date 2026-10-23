@@ -22,6 +22,9 @@ jobs:
       actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # meshcore-kotlin, the shared protocol and Bluetooth code, is a submodule.
+          submodules: true
 
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
@@ -39,7 +42,7 @@ jobs:
       # A clean build with no build cache, so every Kotlin file is really compiled
       # while CodeQL is watching.
       - name: Build
-        run: ./gradlew --no-daemon --no-build-cache clean :protocol:compileKotlin :wear:assembleDebug
+        run: ./gradlew --no-daemon --no-build-cache clean :wear:assembleDebug
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
