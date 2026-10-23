@@ -1,0 +1,135 @@
+# CodeRabbit review settings for WearMesh.
+# Reference: https://docs.coderabbit.ai/reference/configuration
+#
+# Modelled on MeshCore TAK Bridge's settings. Reviews should catch what would hurt people using
+# the watch in the field: writes to the radio, Bluetooth steps that can hang, a foreground service
+# that dies or drains the battery, lost or duplicated messages, and protocol changes that drift
+# from the bridge's copy. Style is left alone; the project has no formatter or linter for it.
+
+language: en-GB # Match MeshCore TAK Bridge's docs and app text.
+tone_instructions: >-
+  Be brief and concrete. Flag real defects and risks, with the failing case. Skip style, naming
+  and refactoring suggestions unless they hide a bug. Write in plain British English.
+early_access: false
+
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: true
+  sequence_diagrams: false
+
+  path_filters:
+    - "!**/build/**"
+    - "!.gradle/**"
+    - "!gradle/wrapper/gradle-wrapper.jar"
+
+  path_instructions:
+    - path: "**"
+      instructions: |
+        A standalone Wear OS app (no phone needed) that connects straight to a MeshCore
+        companion radio over Bluetooth LE for channel and direct messages. The first target is
+        the Pixel Watch 5. Design rules, from docs/design.md; flag any change that breaks one:
+        - The watch is the radio's only client while connected; no multi-client handling.
+        - Never write to the radio's configuration: no channels, contacts, settings, advertised
+          position, paths or keys. Sending text is allowed. Setting the radio's clock is planned
+          (design.md) and needs to be deliberate, not a side effect.
+        - One Bluetooth operation at a time, and every operation has a time limit.
+        - Use every channel the radio reports, not a fixed number of slots.
+        - Channel secrets never leave the radio frames they arrive in; the watch stores names
+          and indexes only.
+        - Nothing leaves the watch: no network calls, no telemetry, no cloud sync.
+        - Battery matters: flag polling, wake-ups or work in the service that could be event
+          driven, and anything that keeps the radio link or the screen on longer than needed.
+        Focus on correctness, thread safety, resource leaks and lost or duplicated messages.
+        When a pull request changes behaviour, check that docs/design.md, docs/M0-spike.md and
+        the README are updated to match.
+
+    - path: "protocol/**"
+      instructions: |
+        MeshCore companion protocol, copied from MeshCore TAK Bridge (see protocol/README.md)
+        until milestone M1 makes it one shared module. Any change here should also go to the
+        bridge, or say why not; flag changes that make the two copies drift without a note.
+        Everything from the radio is untrusted: check every length and offset before reading,
+        and never let a malformed frame throw out of the client. One command is outstanding at
+        a time, each with a time limit; check that a queued command cannot stall the queue.
+        Flag any command that sets, adds, removes or resets state on the radio. Undocumented
+        layouts come from the MeshCore firmware source (MyMesh.cpp, BaseChatMesh.cpp); ask for
+        a reference when a new one appears.
+
+    - path: "wear/src/main/kotlin/**/ble/**"
+      instructions: |
+        Bluetooth LE link to the radio, adapted from MeshCore TAK Bridge. All work runs on the
+        link's own handler thread. Check that each step clears its time limit, that close() is
+        safe to call more than once, that callbacks from a superseded connection attempt are
+        ignored, and that a failure always ends in onClosed with a reason. A first connection
+        often fails with status 133 on Android, which is why connecting is retried.
+
+    - path: "wear/src/main/**"
+      instructions: |
+        The Wear OS app: minSdk 33 (Wear OS 4), targetSdk 34, Compose for Wear OS. The radio link
+        lives in a foreground service of type connectedDevice so it survives the screen going
+        off; check that it is started only with Bluetooth permission granted, always calls
+        startForeground with that type, stops cleanly, and does not leak handlers or threads.
+        Callbacks from the link and protocol threads must reach service state through the main
+        thread or a thread-safe holder; Compose reads state only from flows. Flag work that
+        blocks a listener callback (the protocol client holds its lock while calling them).
+        Layouts must suit a small round screen and one-handed use.
+
+    - path: "**/src/test/**"
+      instructions: |
+        JUnit tests for the plain-Kotlin protocol module. Prefer tests of behaviour with recorded
+        frames. Flag tests that depend on timing (fixed sleeps) or on the order of hash-based
+        collections.
+
+    - path: ".github/workflows/**"
+      instructions: |
+        CI builds every pull request and CodeQL analyses the Kotlin with a manual build. Every
+        action except github/codeql-action must be pinned to a full commit SHA with its version
+        in a comment. Permissions stay least-privilege. Values from the event (branch names,
+        titles) reach shell scripts only through env, never as ${{ }} inside run blocks.
+
+    - path: "docs/**"
+      instructions: |
+        design.md (the plan and its decisions) and M0-spike.md (the Bluetooth test procedure)
+        must match the code. Check that statements about behaviour, limits and numbers are true
+        of the code in this pull request, and that results are only claimed as "seen on a watch"
+        when they were.
+
+  auto_review:
+    enabled: true
+    drafts: false
+    auto_incremental_review: true
+
+  tools:
+    actionlint:
+      enabled: true
+    zizmor:
+      enabled: true
+    shellcheck:
+      enabled: true
+    gitleaks:
+      enabled: true
+    trufflehog:
+      enabled: true
+    # Off: style linters with no project configuration would mostly add noise.
+    detekt:
+      enabled: false
+    yamllint:
+      enabled: false
+    markdownlint:
+      enabled: false
+    languagetool:
+      enabled: false
+
+chat:
+  auto_reply: true
+
+knowledge_base:
+  linked_repositories:
+    - repository: "Colorado-Mesh/meshcore-tak-bridge"
+      instructions: >-
+        The phone app WearMesh shares its protocol module and Bluetooth link with. Fixes to
+        protocol/ or the ble/ classes in either repository usually apply to the other.
