@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Test and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          # The open-source cache, a thin wrapper over actions/cache.
+          cache-provider: basic
+
+      # The release variant is built too, unsigned, so problems that only a release build shows
+      # (such as Android's release lint checks) turn up here rather than at release time.
+      - name: Run tests and build the app
+        shell: bash
+        run: |
+          set -o pipefail
+          ./gradlew test assembleDebug assembleRelease --continue 2>&1 | tee build.log
+
+      # Puts the failing lines on the run's summary page, where they can be read without
+      # opening the full log.
+      - name: Summarise the failure
+        if: failure()
+        shell: bash
+        run: |
+          lines=$(grep -E 'FAILED|^e: |^w: |error:|Exception|AssertionError| at .*\.kt:[0-9]+|What went wrong' -A 6 build.log \
+            | grep -v '^--$' | awk '!seen[$0]++' | head -n 60 | cut -c1-300)
+          {
+            echo '### Build failure'
+            echo '```'
+            echo "$lines"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          message=$(printf '%s' "$lines" | head -c 3500 | sed -e 's/%/%25/g' | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/%0A/g')
+          echo "::error title=Build failure::$message"
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-reports
+          path: "**/build/reports/tests/"
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wearmesh-debug-apk
+          path: wear/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
