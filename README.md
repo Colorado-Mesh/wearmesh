@@ -6,9 +6,9 @@ It is a [Colorado Mesh](https://coloradomesh.org/) project. Its protocol and Blu
 
 ## Status
 
-**Milestone M0, the Bluetooth spike.** Not a messaging app yet. The `wear` app pairs with a companion radio, reads its channels and contacts, collects queued messages, and logs everything, so the questions in the design can be answered on a real watch: does the link hold with the screen off, what packet size does it get, and is on-device dictation good enough. It reads from the radio only and sends nothing on the mesh.
+**M2 step 1: background Check-in.** Not a messaging app yet. M0 (the Bluetooth spike) and M1 (the shared meshcore-kotlin code) are done: the Pixel Watch 5 holds a direct link to the radio with the screen off, and both apps share one copy of the protocol and Bluetooth code. The `wear` app is still the spike screen, now with a background Check-in that connects every 15 minutes, collects queued messages, logs them and disconnects. It reads from the radio only and sends nothing on the mesh.
 
-The first target watch is the Pixel Watch 5. How to run the M0 tests and what to record is in [docs/M0-spike.md](docs/M0-spike.md).
+How to run the tests and what to record: [docs/M0-spike.md](docs/M0-spike.md) for the Live link, [docs/M2-step1-check-in.md](docs/M2-step1-check-in.md) for Check-in. The M2 plan is in [docs/design.md](docs/design.md).
 
 ## Layout
 

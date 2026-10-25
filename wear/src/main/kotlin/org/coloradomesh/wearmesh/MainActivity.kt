@@ -41,15 +41,17 @@ import org.coloradomesh.meshcore.ble.FoundRadio
 import org.coloradomesh.meshcore.ble.RadioScanner
 
 /**
- * The M0 spike's one screen: find and pick a radio, connect or disconnect, test dictation, and
- * watch what the radio reports. The link itself lives in [SpikeService].
+ * The spike's one screen: find and pick a radio, connect or disconnect (Live), turn the background
+ * Check-in on or off or run one now, test dictation, and watch what the radio reports. The Live
+ * link lives in [SpikeService]; Check-in runs in [CheckInWorker].
  */
 class MainActivity : ComponentActivity() {
     private lateinit var scanner: RadioScanner
     private val found = mutableStateListOf<FoundRadio>()
     private var scanning by mutableStateOf(false)
     private var notice by mutableStateOf<String?>(null)
-    private val prefs by lazy { getSharedPreferences("wearmesh", MODE_PRIVATE) }
+    private val prefs by lazy { Prefs.of(this) }
+    private var checkInOn by mutableStateOf(false)
     private var dictationStartedAt = 0L
 
     /** What to do once permissions are granted. */
@@ -79,6 +81,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         SpikeLog.init(this)
         scanner = RadioScanner(this)
+        checkInOn = CheckIn.isOn(this)
         setContent { MaterialTheme { SpikeScreen() } }
     }
 
@@ -132,8 +135,18 @@ class MainActivity : ComponentActivity() {
         scanning = false
         found.clear()
         notice = null
-        prefs.edit().putString(KEY_ADDRESS, address).putString(KEY_NAME, name).apply()
+        prefs.edit().putString(Prefs.RADIO_ADDRESS, address).putString(Prefs.RADIO_NAME, name).apply()
         SpikeService.connect(this, address)
+    }
+
+    private fun toggleCheckIn() = withPermissions {
+        checkInOn = !checkInOn
+        CheckIn.setOn(this, checkInOn)
+    }
+
+    private fun checkNow() = withPermissions {
+        CheckIn.now(this)
+        notice = "Check-in queued; watch the log"
     }
 
     private fun testDictation() {
@@ -166,8 +179,8 @@ class MainActivity : ComponentActivity() {
         val state by SpikeState.state.collectAsStateWithLifecycle()
         val lines by SpikeLog.lines.collectAsStateWithLifecycle()
         val listState = rememberScalingLazyListState()
-        val savedAddress = prefs.getString(KEY_ADDRESS, null)
-        val savedName = prefs.getString(KEY_NAME, null) ?: savedAddress
+        val savedAddress = prefs.getString(Prefs.RADIO_ADDRESS, null)
+        val savedName = prefs.getString(Prefs.RADIO_NAME, null) ?: savedAddress
 
         Scaffold(
             timeText = { TimeText() },
@@ -178,7 +191,7 @@ class MainActivity : ComponentActivity() {
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(start = 8.dp, top = 32.dp, end = 8.dp, bottom = 48.dp),
             ) {
-                item { ListHeader { Text("WearMesh M0") } }
+                item { ListHeader { Text("WearMesh spike") } }
                 item {
                     Text(
                         text = listOfNotNull(state.radioName, state.link).joinToString(" · "),
@@ -201,6 +214,17 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 notice?.let { text -> item { Text(text, textAlign = TextAlign.Center, style = MaterialTheme.typography.caption2) } }
+
+                if (savedAddress != null) {
+                    item {
+                        WideChip(
+                            label = if (checkInOn) "Check-in: on" else "Check-in: off",
+                            detail = "Every ${CheckIn.INTERVAL_MINUTES} min in the background",
+                            secondary = !checkInOn,
+                        ) { toggleCheckIn() }
+                    }
+                    item { WideChip("Check now", secondary = true, enabled = !state.running) { checkNow() } }
+                }
 
                 item { WideChip("Test dictation", secondary = true) { testDictation() } }
 
@@ -254,8 +278,6 @@ class MainActivity : ComponentActivity() {
     }
 
     private companion object {
-        const val KEY_ADDRESS = "radio_address"
-        const val KEY_NAME = "radio_name"
         const val SHOWN_LOG_LINES = 80
     }
 }
