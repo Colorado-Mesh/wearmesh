@@ -172,6 +172,8 @@ Four milestones, each ending in a go/no-go check; the first is a throwaway spike
    - Done 23 October 2026: [meshcore-kotlin](https://github.com/Colorado-Mesh/meshcore-kotlin) holds `protocol` (pure Kotlin, with the bridge's tests plus new ones, covering legacy and V3 channel and direct messages) and `ble` (the Bluetooth link, scanner and session), in packages `org.coloradomesh.meshcore.*`. Both apps include it as a git submodule and build it from source with `includeBuild`.
 3. **M2 — Read-only client.** Channel list, channel view, notifications, Check-in mode.
    - Exit: one full day of carry with Check-in, battery drain measured.
+   - Plan (25 October 2026): channel list; channel and direct-message views (read-only); grouped notifications; Live and Check-in modes; on-watch storage. Steps: (1) prove a background Check-in job can reach the radio with the screen off, [M2-step1-check-in.md](M2-step1-check-in.md); (2) storage and sync; (3) screens; (4) notifications and modes; (5) full-day carry.
+   - Decided: Check-in every 15 minutes by default, 30 or 60 as options; notifications on by default for direct messages and private channels only, others turned on per channel; first run starts in Live with a prompt to switch to Check-in; opening the app always syncs; 100 messages kept per conversation.
 4. **M3 — Messaging.** Reply screen with quick replies, dictation, keyboard; direct messages to known contacts; Live mode; Tile and complication.
    - Exit: field test with the Colorado mesh, messages round-trip with a phone client on another radio.
 

@@ -238,7 +238,7 @@ class SpikeService : Service() {
         private const val RECONNECT_MAX_MS = 5 * 60_000L
 
         /** The name the watch gives the radio when it says hello. */
-        private const val APP_NAME = "WearMesh"
+        const val APP_NAME = "WearMesh"
 
         /** Call only once Bluetooth permission is granted and the app is on screen. */
         fun connect(context: Context, address: String) {
