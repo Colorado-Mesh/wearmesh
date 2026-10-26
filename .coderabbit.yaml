@@ -25,6 +25,11 @@ reviews:
     - "!**/build/**"
     - "!.gradle/**"
     - "!gradle/wrapper/gradle-wrapper.jar"
+    # Written by docs/icon/make_icon.py; review the script, not its output.
+    - "!docs/icon/*.png"
+    - "!docs/icon/icon.svg"
+    - "!wear/src/main/res/drawable/ic_*.xml"
+    - "!wear/src/main/res/mipmap-anydpi-v26/*.xml"
 
   path_instructions:
     - path: "**"
@@ -65,6 +70,13 @@ reviews:
         thread or a thread-safe holder; Compose reads state only from flows. Flag work that
         blocks a listener callback (the protocol client holds its lock while calling them).
         Layouts must suit a small round screen and one-handed use.
+
+    - path: "docs/icon/make_icon.py"
+      instructions: |
+        Writes the app's icon drawables, launcher icons, docs/icon/icon.svg and the PNGs. If
+        this script changes, the generated files should change with it in the same pull request.
+        Everything must stay within a radius of 33 of the centre of the 108 grid, since a watch
+        launcher shows the icon as a circle.
 
     - path: ".github/workflows/**"
       instructions: |
