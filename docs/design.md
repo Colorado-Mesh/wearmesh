@@ -86,7 +86,7 @@ The app offers two connection modes, and the user picks per session: Live for in
 | Check-in | Connect on a timer or when the app opens, drain the queue, disconnect | Up to one interval late | Low; radio mostly idle | All-day carry |
 | Manual | Connect only while the app is on screen | None in background | Lowest | Occasional reading |
 
-The Check-in interval is user-set (default to be chosen after battery testing). Check-in uses WorkManager for scheduling and a short-lived foreground service for each sync, since Wear OS may not let a background job open a BLE connection reliably.
+The Check-in interval is user-set: 15 minutes by default, 30 or 60 as options. Check-in runs on exact allow-while-idle alarms, each starting a short-lived foreground service with a wake lock for one sync. A WorkManager job was tried first and Doze held it back for 6 hours overnight ([M2-step1-check-in.md](M2-step1-check-in.md)). Exact alarms need the user to allow "Alarms & reminders" once.
 
 Connection lifecycle:
 
