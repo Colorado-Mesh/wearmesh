@@ -8,10 +8,12 @@ import android.os.BatteryManager
 import android.os.PowerManager
 import android.os.SystemClock
 import androidx.core.content.ContextCompat
-import androidx.work.CoroutineWorker
-import androidx.work.WorkerParameters
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.coloradomesh.meshcore.ble.RadioSession
@@ -27,37 +29,57 @@ import java.util.concurrent.atomic.AtomicReference
 /**
  * One Check-in: connect to the radio, collect what it has queued, disconnect.
  *
- * M2 step 1 is to prove this works from the background, screen off and app closed, with no
- * foreground service. Each run logs when it started and why, the screen state, the app's standby
- * bucket and battery-optimisation state (which decide how often the system lets it run), how long
- * the link took, how many messages came, and the watch battery. The gaps between runs in the log
- * show how far Doze held the schedule back.
+ * Started by [CheckInService] (from the exact alarm [CheckIn] sets, or from "Check now"), or, if the
+ * system will not start that service, inside the alarm itself by [CheckInAlarmReceiver]. Each run
+ * logs when it started and why, the screen and Doze state, the app's standby bucket and
+ * battery-optimisation state, how long the link took, how many messages came, and the watch
+ * battery.
  *
- * It never waits on a Handler delay of its own: the time limits below are coroutine timeouts, and
- * the system holds a wake lock while the job runs, so the link's own time limits keep working.
- * It always disconnects before returning, even when the system stops the job, so the radio is
- * free for the next client.
+ * Each run holds a partial wake lock. The first overnight test showed that a running job is not
+ * guaranteed to keep the CPU awake: in deep Doze the link's 12 s connection limit took 30 s and a
+ * 1.5 s pause took 6 minutes, because those timers stop while the CPU sleeps. It always
+ * disconnects before returning, even when the run is stopped part-way, so the radio is free for
+ * the next client.
  */
-class CheckInWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+object CheckInRun {
+    /** For runs that outlive the caller, such as one inside an alarm broadcast. */
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    override suspend fun doWork(): Result {
-        val app = applicationContext
+    /** Long enough for 3 connection tries, pairing checks and reading a few hundred contacts. */
+    const val TIME_LIMIT_MS = 90_000L
+    private const val CLOSE_WAIT_MS = 5_000L
+
+    /** The wake lock outlasts the time limit by this much, then lets go whatever happens. */
+    private const val WAKE_MARGIN_MS = 15_000L
+
+    /** One check-in at a time in this process, however it was started. */
+    private val running = AtomicBoolean(false)
+
+    suspend fun run(context: Context, why: String, timeLimitMs: Long = TIME_LIMIT_MS) {
+        val app = context.applicationContext
         SpikeLog.init(app)
         if (!running.compareAndSet(false, true)) {
-            SpikeLog.log("Check-in: skipped, another is still running")
-            return Result.success()
+            SpikeLog.log("Check-in ($why): skipped, another is still running")
+            return
         }
+        val wake = app.getSystemService(PowerManager::class.java)
+            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "WearMesh:check-in")
+            .apply {
+                setReferenceCounted(false)
+                acquire(timeLimitMs + CLOSE_WAIT_MS + WAKE_MARGIN_MS)
+            }
         try {
-            checkIn(app)
+            checkIn(app, why, timeLimitMs)
+        } catch (e: CancellationException) {
+            SpikeLog.log("Check-in ($why): stopped before it finished")
+            throw e
         } finally {
+            if (wake.isHeld) wake.release()
             running.set(false)
         }
-        // Never Result.retry(): a retry would run off the 15-minute schedule and blur the test.
-        return Result.success()
     }
 
-    private suspend fun checkIn(app: Context) {
-        val why = inputData.getString(KEY_WHY) ?: "scheduled"
+    private suspend fun checkIn(app: Context, why: String, timeLimitMs: Long) {
         val address = Prefs.of(app).getString(Prefs.RADIO_ADDRESS, null)
         if (address == null) {
             SpikeLog.log("Check-in ($why): skipped, no radio chosen yet")
@@ -117,8 +139,8 @@ class CheckInWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         )
         val result = try {
             session.open()
-            withTimeoutOrNull(TIME_LIMIT_MS) { outcome.await() }
-                ?: Outcome.Ended("not finished within ${TIME_LIMIT_MS / 1000} s")
+            withTimeoutOrNull(timeLimitMs) { outcome.await() }
+                ?: Outcome.Ended("not finished within ${timeLimitMs / 1000} s")
         } finally {
             // Also when the system stops the job: a link left open would keep the radio busy,
             // locking out the Live link and the next check-in.
@@ -147,7 +169,7 @@ class CheckInWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         }
     }
 
-    /** What decides whether and how often the system lets this job run. */
+    /** What decides whether and how often the system lets this app run in the background. */
     private fun conditions(app: Context): String {
         val power = app.getSystemService(PowerManager::class.java)
         val screen = if (power.isInteractive) "screen on" else "screen off"
@@ -172,16 +194,5 @@ class CheckInWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         data object Drained : Outcome
 
         data class Ended(val reason: String) : Outcome
-    }
-
-    companion object {
-        const val KEY_WHY = "why"
-
-        /** Long enough for 3 connection tries, pairing checks and reading a few hundred contacts. */
-        private const val TIME_LIMIT_MS = 90_000L
-        private const val CLOSE_WAIT_MS = 5_000L
-
-        /** One check-in at a time in this process, whether scheduled or asked for. */
-        private val running = AtomicBoolean(false)
     }
 }

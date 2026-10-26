@@ -7,8 +7,10 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
+import android.provider.Settings
 import android.speech.RecognizerIntent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -52,6 +54,7 @@ class MainActivity : ComponentActivity() {
     private var notice by mutableStateOf<String?>(null)
     private val prefs by lazy { Prefs.of(this) }
     private var checkInOn by mutableStateOf(false)
+    private var exactAlarmsAllowed by mutableStateOf(true)
     private var dictationStartedAt = 0L
 
     /** What to do once permissions are granted. */
@@ -83,6 +86,12 @@ class MainActivity : ComponentActivity() {
         scanner = RadioScanner(this)
         checkInOn = CheckIn.isOn(this)
         setContent { MaterialTheme { SpikeScreen() } }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // The user may have just allowed "Alarms & reminders" in Settings.
+        exactAlarmsAllowed = CheckIn.exactAlarmsAllowed(this)
     }
 
     override fun onStop() {
@@ -142,11 +151,22 @@ class MainActivity : ComponentActivity() {
     private fun toggleCheckIn() = withPermissions {
         checkInOn = !checkInOn
         CheckIn.setOn(this, checkInOn)
+        exactAlarmsAllowed = CheckIn.exactAlarmsAllowed(this)
+        if (checkInOn && !exactAlarmsAllowed) notice = "Allow \"Alarms & reminders\" so Check-in can run while the watch sleeps"
     }
 
     private fun checkNow() = withPermissions {
         CheckIn.now(this)
-        notice = "Check-in queued; watch the log"
+        notice = "Check-in started; watch the log"
+    }
+
+    /** Opens the system page where the user allows exact alarms for this app. */
+    private fun openAlarmSettings() {
+        try {
+            startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName")))
+        } catch (e: ActivityNotFoundException) {
+            notice = "This watch has no page for it; allow it with adb (see docs/M2-step1-check-in.md)"
+        }
     }
 
     private fun testDictation() {
@@ -219,11 +239,22 @@ class MainActivity : ComponentActivity() {
                     item {
                         WideChip(
                             label = if (checkInOn) "Check-in: on" else "Check-in: off",
-                            detail = "Every ${CheckIn.INTERVAL_MINUTES} min in the background",
+                            detail = "Every ${CheckIn.INTERVAL_MINUTES} min, also while the watch sleeps",
                             secondary = !checkInOn,
                         ) { toggleCheckIn() }
                     }
-                    item { WideChip("Check now", secondary = true, enabled = !state.running) { checkNow() } }
+                    if (checkInOn && !exactAlarmsAllowed) {
+                        item { WideChip("Allow alarms", detail = "Needed for Check-in") { openAlarmSettings() } }
+                    }
+                    item {
+                        WideChip(
+                            label = "Check now",
+                            // The radio serves one client, so a check-in cannot run while Live holds it.
+                            detail = if (state.running) "Disconnect Live first" else null,
+                            secondary = true,
+                            enabled = !state.running,
+                        ) { checkNow() }
+                    }
                 }
 
                 item { WideChip("Test dictation", secondary = true) { testDictation() } }

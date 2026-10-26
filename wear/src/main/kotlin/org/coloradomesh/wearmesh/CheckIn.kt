@@ -1,50 +1,74 @@
 package org.coloradomesh.wearmesh
 
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.content.Context
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.ExistingWorkPolicy
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.WorkManager
-import androidx.work.workDataOf
-import java.util.concurrent.TimeUnit
+import android.content.Intent
+import android.os.SystemClock
 
 /**
- * Turns the periodic Check-in on and off, and runs one on request.
+ * Schedules Check-in on exact alarms, and runs one on request.
  *
- * WorkManager runs the job on the system's job scheduler, which keeps time by the wall clock and
- * survives the watch sleeping and restarting; that is why it is used rather than a Handler delay
- * (see the M0 lesson in docs/design.md). The scheduler will not run a periodic job more often than
- * every 15 minutes, and Doze can hold it back further while the watch is still; how far is what the
- * overnight test measures.
+ * The first overnight test (docs/M2-step1-check-in.md) found that Doze held a WorkManager job back
+ * for 6 hours. An exact allow-while-idle alarm fires in Doze too, at most about every 9 minutes,
+ * so a 15-minute schedule holds. There is no repeating form of it, so each alarm sets the next.
+ * An exact alarm also lets the app start a foreground service from the background, which is how
+ * [CheckInAlarmReceiver] runs each check-in.
+ *
+ * Exact alarms need the "Alarms & reminders" permission, which Android 14 leaves off for new
+ * installs: the user turns it on once. Without it nothing is scheduled, and the log says why.
  */
 object CheckIn {
-    private const val PERIODIC = "check-in"
-    private const val ONCE = "check-in-now"
     const val INTERVAL_MINUTES = 15L
+    private const val INTERVAL_MS = INTERVAL_MINUTES * 60_000L
+
+    /** The first check-in after turning it on, soon enough to see it work. */
+    private const val FIRST_DELAY_MS = 60_000L
+    private const val REQUEST_CODE = 1
 
     fun isOn(context: Context): Boolean = Prefs.of(context).getBoolean(Prefs.CHECK_IN, false)
 
+    fun exactAlarmsAllowed(context: Context): Boolean = alarms(context).canScheduleExactAlarms()
+
     fun setOn(context: Context, on: Boolean) {
         Prefs.of(context).edit().putBoolean(Prefs.CHECK_IN, on).apply()
-        val work = WorkManager.getInstance(context)
         if (on) {
-            val request = PeriodicWorkRequestBuilder<CheckInWorker>(INTERVAL_MINUTES, TimeUnit.MINUTES)
-                .setInputData(workDataOf(CheckInWorker.KEY_WHY to "scheduled"))
-                .build()
-            work.enqueueUniquePeriodicWork(PERIODIC, ExistingPeriodicWorkPolicy.UPDATE, request)
             SpikeLog.log("Check-in: turned on, every $INTERVAL_MINUTES min")
+            scheduleNext(context, FIRST_DELAY_MS)
         } else {
-            work.cancelUniqueWork(PERIODIC)
+            alarms(context).cancel(alarmIntent(context))
             SpikeLog.log("Check-in: turned off")
         }
     }
 
-    /** One check-in now, for testing; ignored while one is already waiting to run. */
-    fun now(context: Context) {
-        val request = OneTimeWorkRequestBuilder<CheckInWorker>()
-            .setInputData(workDataOf(CheckInWorker.KEY_WHY to "asked for"))
-            .build()
-        WorkManager.getInstance(context).enqueueUniqueWork(ONCE, ExistingWorkPolicy.KEEP, request)
+    /**
+     * Sets the next alarm, replacing any already set. Called by each alarm, after a restart or an
+     * app update (which clear alarms), and when the permission is granted. Does nothing while
+     * Check-in is off.
+     */
+    fun scheduleNext(context: Context, delayMs: Long = INTERVAL_MS) {
+        if (!isOn(context)) return
+        if (!exactAlarmsAllowed(context)) {
+            SpikeLog.log("Check-in: not scheduled, \"Alarms & reminders\" is not allowed for WearMesh")
+            return
+        }
+        alarms(context).setExactAndAllowWhileIdle(
+            AlarmManager.ELAPSED_REALTIME_WAKEUP,
+            SystemClock.elapsedRealtime() + delayMs,
+            alarmIntent(context),
+        )
+        SpikeLog.log("Check-in: next at ${SpikeLog.clock(System.currentTimeMillis() + delayMs)}")
     }
+
+    /** One check-in now, while the app is on screen. */
+    fun now(context: Context) = CheckInService.start(context, "asked for")
+
+    private fun alarms(context: Context) = context.getSystemService(AlarmManager::class.java)
+
+    private fun alarmIntent(context: Context): PendingIntent = PendingIntent.getBroadcast(
+        context,
+        REQUEST_CODE,
+        Intent(context, CheckInAlarmReceiver::class.java),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
 }
