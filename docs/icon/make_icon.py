@@ -20,8 +20,11 @@ Outputs:
     docs/icon/icon.svg            (the full-colour mark, 108 x 108)
     docs/icon/icon-512.png        (round, for the README, the repository and a store listing)
     docs/icon/preview.png         (launcher size, themed and notification versions side by side)
+    docs/icon/social-preview.png  (1280 x 640, for the repository's social preview on GitHub)
 
-The PNGs need cairosvg (pip install cairosvg); without it the script skips them and says so.
+The PNGs need cairosvg and Pillow (pip install cairosvg pillow); without them the script skips
+them and says so. The social preview's wordmark is set in Poppins (fonts.google.com/specimen/Poppins)
+when it is installed, and in DejaVu Sans otherwise.
 """
 from pathlib import Path
 
@@ -283,6 +286,103 @@ def write_pngs():
         sheet.alpha_composite(image, (x, (192 - image.height) // 2))
         x += image.width + 24
     sheet.save(DOCS / "preview.png")
+    write_social_preview(cairosvg, Image)
+
+
+# --- Social preview -----------------------------------------------------------------------
+
+SOCIAL_W, SOCIAL_H = 1280, 640
+TAGLINE = "MeshCore messaging on your watch"
+SUBLINE = "Wear OS, straight to your radio, no phone"
+CREDIT = "Colorado Mesh"
+
+
+def font(weight, size):
+    """Poppins if it can be found, else DejaVu Sans, else Pillow's own font."""
+    from PIL import ImageFont
+    import subprocess
+    family = {"bold": "Poppins:bold", "regular": "Poppins:regular", "medium": "Poppins:medium"}[weight]
+    candidates = []
+    try:
+        found = subprocess.run(["fc-match", "-f", "%{file}", family], capture_output=True, text=True, timeout=5)
+        if "oppins" in found.stdout:
+            candidates.append(found.stdout)
+    except (OSError, subprocess.SubprocessError):
+        pass
+    dejavu = "DejaVuSans-Bold.ttf" if weight == "bold" else "DejaVuSans.ttf"
+    candidates += [f"/usr/share/fonts/truetype/dejavu/{dejavu}", dejavu]
+    for candidate in candidates:
+        try:
+            return ImageFont.truetype(candidate, size)
+        except OSError:
+            continue
+    return ImageFont.load_default(size)
+
+
+def hex_rgb(hex_rgb):
+    return tuple(int(hex_rgb[i:i + 2], 16) for i in (1, 3, 5))
+
+
+def write_social_preview(cairosvg, Image):
+    """The icon beside the WearMesh wordmark, on the icon's navy, for GitHub's social preview."""
+    from io import BytesIO
+    from PIL import ImageDraw
+    top, bottom = hex_rgb(NAVY_TOP), hex_rgb(NAVY_BOTTOM)
+    banner = Image.new("RGBA", (SOCIAL_W, SOCIAL_H))
+    draw = ImageDraw.Draw(banner)
+    for y in range(SOCIAL_H):
+        t = y / (SOCIAL_H - 1)
+        draw.line([(0, y), (SOCIAL_W, y)], fill=tuple(round(a + (b - a) * t) for a, b in zip(top, bottom)) + (255,))
+
+    # GitHub crops the preview in some places, so everything sits inside a 72 px margin.
+    margin = 72
+    icon_size = 360
+    icon = Image.open(BytesIO(cairosvg.svg2png(bytestring=mark_svg(round_mask=True).encode(),
+                                               output_width=icon_size, output_height=icon_size))).convert("RGBA")
+    icon_x, icon_y = 96, (SOCIAL_H - icon_size) // 2
+    banner.alpha_composite(icon, (icon_x, icon_y))
+
+    # The wordmark is as large as fits beside the icon, up to 120 px.
+    text_x = icon_x + icon_size + 64
+    room = SOCIAL_W - margin - text_x
+    wear, mesh = "Wear", "Mesh"
+    size = 120
+    while draw.textlength(wear + mesh, font=font("bold", size)) > room:
+        size -= 2
+    word = font("bold", size)
+    word_width = draw.textlength(wear + mesh, font=word)
+    _, word_top, _, word_bottom = draw.textbbox((0, 0), wear + mesh, font=word)
+    tagline = font("medium", 34)
+    subline = font("regular", 27)
+    credit = font("medium", 24)
+
+    # The text block: wordmark, bar, tagline, subline, credit; centred on the icon.
+    word_h, bar_gap, bar_h = word_bottom - word_top, 26, 8
+    block_h = word_h + bar_gap + bar_h + 34 + 40 + 14 + 34 + 46 + 26
+    y = icon_y + (icon_size - block_h) // 2
+    draw.text((text_x, y - word_top), wear, font=word, fill=OFF_WHITE)
+    draw.text((text_x + draw.textlength(wear, font=word), y - word_top), mesh, font=word, fill=YELLOW)
+    y += word_h + bar_gap
+
+    # A short bar in the bezel's red-to-yellow, under the wordmark.
+    bar_w = round(word_width * 0.42)
+    red, yellow, light = hex_rgb(RED), hex_rgb(YELLOW), hex_rgb(LIGHT_YELLOW)
+    for i in range(bar_w):
+        t = i / (bar_w - 1)
+        a, b, u = (red, yellow, t * 2) if t < 0.5 else (yellow, light, t * 2 - 1)
+        draw.line([(text_x + i, y), (text_x + i, y + bar_h)], fill=tuple(round(p + (q - p) * u) for p, q in zip(a, b)))
+    y += bar_h + 34
+
+    def line_of(text, face, colour, gap_after):
+        nonlocal y
+        top_off = draw.textbbox((0, 0), "Mg", font=face)[1]
+        draw.text((text_x, y - top_off), text, font=face, fill=colour)
+        y += face.size + gap_after
+
+    line_of(TAGLINE, tagline, OFF_WHITE, 14)
+    line_of(SUBLINE, subline, SNOW_BOTTOM, 46)
+    line_of(CREDIT, credit, GREEN_TOP, 0)
+    banner.convert("RGB").save(DOCS / "social-preview.png", optimize=True)
 
 
 if __name__ == "__main__":
