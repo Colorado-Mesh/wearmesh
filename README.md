@@ -1,5 +1,7 @@
 # WearMesh
 
+<p align="center"><img src="docs/icon/icon-512.png" width="160" alt="The WearMesh icon: the Colorado Mesh mark of snow-capped mountains and green hills, inside a round red-to-gold watch bezel with a glowing mesh node at 12 o'clock and a crown at 3"></p>
+
 A standalone Wear OS app for [MeshCore](https://docs.meshcore.io/) messaging from the wrist. The watch connects straight to a MeshCore companion radio over Bluetooth, with no phone in the loop, and handles channel and direct messages.
 
 It is a [Colorado Mesh](https://coloradomesh.org/) project. Its protocol and Bluetooth code is shared with [MeshCore TAK Bridge](https://github.com/Colorado-Mesh/meshcore-tak-bridge) through [meshcore-kotlin](https://github.com/Colorado-Mesh/meshcore-kotlin), included here as a git submodule. How it is meant to work, and the plan, are in [docs/design.md](docs/design.md).
@@ -16,7 +18,7 @@ How to run the tests and what to record: [docs/M0-spike.md](docs/M0-spike.md) fo
 | --- | --- |
 | `meshcore-kotlin/` | A git submodule: the companion protocol in pure Kotlin, with its tests, and the Bluetooth link, shared with MeshCore TAK Bridge |
 | `wear/` | The Wear OS app: the M0 spike screen and its foreground service |
-| `docs/` | The design proposal and the M0 test procedure |
+| `docs/` | The design proposal and the test procedures; `docs/icon/` has the icon and the script that draws it (`python3 docs/icon/make_icon.py` after changing it) |
 
 ## Build
 
