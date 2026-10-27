@@ -41,11 +41,12 @@ import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
 import org.coloradomesh.meshcore.ble.FoundRadio
 import org.coloradomesh.meshcore.ble.RadioScanner
+import org.coloradomesh.wearmesh.data.Storage
 
 /**
  * The spike's one screen: find and pick a radio, connect or disconnect (Live), turn the background
- * Check-in on or off or run one now, test dictation, and watch what the radio reports. The Live
- * link lives in [SpikeService]; Check-in runs in [CheckInWorker].
+ * Check-in on or off or run one now, test dictation, and watch what the radio reports and what
+ * the watch has stored. The Live link lives in [SpikeService]; Check-in runs in [CheckInService].
  */
 class MainActivity : ComponentActivity() {
     private lateinit var scanner: RadioScanner
@@ -92,6 +93,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         // The user may have just allowed "Alarms & reminders" in Settings.
         exactAlarmsAllowed = CheckIn.exactAlarmsAllowed(this)
+        Storage.refreshCounts(this)
     }
 
     override fun onStop() {
@@ -198,6 +200,7 @@ class MainActivity : ComponentActivity() {
     private fun SpikeScreen() {
         val state by SpikeState.state.collectAsStateWithLifecycle()
         val lines by SpikeLog.lines.collectAsStateWithLifecycle()
+        val stored by Storage.counts.collectAsStateWithLifecycle()
         val listState = rememberScalingLazyListState()
         val savedAddress = prefs.getString(Prefs.RADIO_ADDRESS, null)
         val savedName = prefs.getString(Prefs.RADIO_NAME, null) ?: savedAddress
@@ -265,6 +268,10 @@ class MainActivity : ComponentActivity() {
                         state.packetSize?.let { "Packet size $it B" },
                         "Contacts ${state.contacts} · Messages ${state.messages}",
                         state.radioMillivolts?.let { "Radio battery $it mV" },
+                        stored?.let {
+                            "Stored: ${it.messages} messages in ${it.conversations} conversations, " +
+                                "${it.channels} channels, ${it.contacts} contacts"
+                        },
                     )
                     Text(facts.joinToString("\n"), textAlign = TextAlign.Center, style = MaterialTheme.typography.caption2)
                 }

@@ -60,8 +60,11 @@ object CheckIn {
         SpikeLog.log("Check-in: next at ${SpikeLog.clock(System.currentTimeMillis() + delayMs)}")
     }
 
+    /** Why a check-in asked for on screen runs; such a check-in reads everything. */
+    const val ASKED_FOR = "asked for"
+
     /** One check-in now, while the app is on screen. */
-    fun now(context: Context) = CheckInService.start(context, "asked for")
+    fun now(context: Context) = CheckInService.start(context, ASKED_FOR)
 
     private fun alarms(context: Context) = context.getSystemService(AlarmManager::class.java)
 

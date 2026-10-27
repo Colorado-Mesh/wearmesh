@@ -8,16 +8,17 @@ It is a [Colorado Mesh](https://coloradomesh.org/) project. Its protocol and Blu
 
 ## Status
 
-**M2 step 1: background Check-in.** Not a messaging app yet. M0 (the Bluetooth spike) and M1 (the shared meshcore-kotlin code) are done: the Pixel Watch 5 holds a direct link to the radio with the screen off, and both apps share one copy of the protocol and Bluetooth code. The `wear` app is still the spike screen, now with a background Check-in that connects every 15 minutes, collects queued messages, logs them and disconnects. It reads from the radio only and sends nothing on the mesh.
+**M2 step 2: storage and sync.** Not a messaging app yet. M0 (the Bluetooth spike) and M1 (the shared meshcore-kotlin code) are done, and M2 step 1 showed a background Check-in reaching the radio every 15 minutes all night. The `wear` app is still the spike screen; Check-in and Live now store what the radio sends (channels, contacts and the last 100 messages per conversation) in a database on the watch. It reads from the radio only and sends nothing on the mesh.
 
-How to run the tests and what to record: [docs/M0-spike.md](docs/M0-spike.md) for the Live link, [docs/M2-step1-check-in.md](docs/M2-step1-check-in.md) for Check-in. The M2 plan is in [docs/design.md](docs/design.md).
+How to run the tests and what to record: [docs/M0-spike.md](docs/M0-spike.md) for the Live link, [docs/M2-step1-check-in.md](docs/M2-step1-check-in.md) for Check-in, [docs/M2-step2-storage.md](docs/M2-step2-storage.md) for storage. The M2 plan is in [docs/design.md](docs/design.md).
 
 ## Layout
 
 | Folder | What it holds |
 | --- | --- |
 | `meshcore-kotlin/` | A git submodule: the companion protocol in pure Kotlin, with its tests, and the Bluetooth link, shared with MeshCore TAK Bridge |
-| `wear/` | The Wear OS app: the M0 spike screen and its foreground service |
+| `wear/` | The Wear OS app: the spike screen, Live and Check-in, and in `data/` the message store and the sync step shared by both |
+| `wear/schemas/` | The database schema of each version, written by Room during the build |
 | `docs/` | The design proposal and the test procedures; `docs/icon/` has the icon and the script that draws it (`python3 docs/icon/make_icon.py` after changing it), plus `social-preview.png` for GitHub |
 
 ## Build
@@ -34,6 +35,7 @@ Then open the folder in Android Studio, or from a terminal:
 
 ```bash
 ./gradlew :wear:assembleDebug                    # wear/build/outputs/apk/debug/wear-debug.apk
+./gradlew :wear:testDebugUnitTest                # the app's unit tests, the database's on Robolectric
 ./gradlew -p meshcore-kotlin :protocol:test      # the shared protocol's unit tests
 ```
 

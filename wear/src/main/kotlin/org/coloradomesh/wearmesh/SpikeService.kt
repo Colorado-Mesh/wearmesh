@@ -22,11 +22,15 @@ import org.coloradomesh.meshcore.protocol.Contact
 import org.coloradomesh.meshcore.protocol.DeviceInfo
 import org.coloradomesh.meshcore.protocol.DirectMessage
 import org.coloradomesh.meshcore.protocol.SelfInfo
+import org.coloradomesh.wearmesh.data.Storage
+import org.coloradomesh.wearmesh.data.SyncPlan
+import org.coloradomesh.wearmesh.data.SyncRecorder
 
 /**
- * M0 spike: holds one link to a companion radio in a connectedDevice foreground service, so it
- * stays up with the screen off, and logs everything the radio says. It only reads from the radio;
- * it sends nothing on the mesh.
+ * Live mode: holds one link to a companion radio in a connectedDevice foreground service, so it
+ * stays up with the screen off, stores what the radio sends (the same sync step as Check-in, with
+ * a full read each time the link comes up) and logs it. It only reads from the radio; it sends
+ * nothing on the mesh.
  *
  * When the link drops it reconnects with a growing pause (30 s doubling up to 5 min) and logs how
  * long each link lasted. Each time the protocol client reads the radio's battery (about every
@@ -40,6 +44,7 @@ import org.coloradomesh.meshcore.protocol.SelfInfo
 class SpikeService : Service() {
     private val main = Handler(Looper.getMainLooper())
     private var session: RadioSession? = null
+    private var recorder: SyncRecorder? = null
 
     /** Bumped for every new session, so callbacks from an older one are ignored. */
     private var generation = 0
@@ -72,6 +77,8 @@ class SpikeService : Service() {
                 address = target
                 session?.close()
                 session = null
+                recorder?.finish()
+                recorder = null
                 SpikeState.update { SpikeState.Snapshot(running = true, link = "Connecting…") }
                 SpikeLog.log("M0: connecting to $target; watch battery ${watchBattery()}%")
                 openSession()
@@ -89,6 +96,8 @@ class SpikeService : Service() {
         stopping = true
         session?.close()
         session = null
+        recorder?.finish()
+        recorder = null
         main.removeCallbacksAndMessages(null)
         super.onDestroy()
     }
@@ -97,10 +106,21 @@ class SpikeService : Service() {
         val target = address ?: return
         val mine = ++generation
         contactsSeen = 0
+        val store = Storage.store(this)
+        // Queued ahead of everything this session writes; a different radio clears the store.
+        Storage.writer.execute {
+            try {
+                store.useRadio(target)
+            } catch (e: Exception) {
+                SpikeLog.log("Storage failed: ${e.message}")
+            }
+        }
+        val sync = SyncRecorder(store, SyncPlan(fullRead = true, contactsSince = 0), Storage.writer, { SpikeLog.log(it) }, also = listener)
+        recorder = sync
         val opened = RadioSession(
             context = this,
             address = target,
-            listener = listener,
+            listener = sync,
             appName = APP_NAME,
             onLog = { SpikeLog.log("Link: $it") },
             onLinkReady = { size -> main.post { if (mine == generation) linkReady(size) } },
@@ -120,6 +140,9 @@ class SpikeService : Service() {
 
     private fun linkClosed(reason: String) {
         session = null
+        recorder?.finish()
+        recorder = null
+        Storage.refreshCounts(this)
         if (linkUpAt > 0) {
             val minutes = (SystemClock.elapsedRealtime() - linkUpAt) / 60_000.0
             SpikeLog.log("M0: link down after %.1f min (%s)".format(minutes, reason))
@@ -208,6 +231,10 @@ class SpikeService : Service() {
         override fun onDirectMessage(message: DirectMessage) {
             SpikeLog.log("DM from ${message.senderPrefixHex} ${age(message.timestamp)}: ${message.text}")
             SpikeState.update { it.copy(messages = it.messages + 1) }
+        }
+
+        override fun onQueueEmpty() {
+            Storage.refreshCounts(this@SpikeService)
         }
 
         override fun onBattery(millivolts: Int) {

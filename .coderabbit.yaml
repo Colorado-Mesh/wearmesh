@@ -30,6 +30,8 @@ reviews:
     - "!docs/icon/icon.svg"
     - "!wear/src/main/res/drawable/ic_*.xml"
     - "!wear/src/main/res/mipmap-anydpi-v26/*.xml"
+    # Written by Room during the build; review the entities and DAO instead.
+    - "!wear/schemas/**"
 
   path_instructions:
     - path: "**"
@@ -70,6 +72,16 @@ reviews:
         thread or a thread-safe holder; Compose reads state only from flows. Flag work that
         blocks a listener callback (the protocol client holds its lock while calling them).
         Layouts must suit a small round screen and one-handed use.
+
+    - path: "wear/src/main/kotlin/org/coloradomesh/wearmesh/data/**"
+      instructions: |
+        The message store (Room) and the radio sync step shared by Check-in and Live. Decided
+        for M2: one history for one radio (syncing with another radio clears the store),
+        forgetting a radio deletes its messages, the newest 100 messages per conversation by
+        arrival order, and a message with the same conversation, sender, sent time and text is
+        stored once. Channel keys are never stored. Storage calls run on Storage.writer, one at
+        a time; flag any that run on the main thread or inside a protocol listener call. A
+        change to an entity needs a schema version bump.
 
     - path: "docs/icon/make_icon.py"
       instructions: |
