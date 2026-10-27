@@ -20,6 +20,29 @@ Watch battery fell from 88% to 80% over about 9 hours, low mainly because the jo
 
 Check-in now runs on an exact allow-while-idle alarm, which fires in Doze too (Android allows one at most about every 9 minutes). Each alarm sets the next, then starts a short foreground service that does the check-in, holding a wake lock for at most 2 minutes. If the system refuses to start the service, the check-in runs inside the alarm instead, with a 40 s limit, and the log says so. The alarm is set again after a restart, an app update, or when the permission is granted.
 
+### Result (26 to 27 October 2026)
+
+Yes. Over 9 h 16 min, from 19:48 to 05:04, every check-in ran:
+
+| Question | Night 2 |
+| --- | --- |
+| Check-ins | 38 of 38; 35 of them in Doze |
+| Gaps between them | 15.0 to 15.1 minutes, none missed |
+| Time each took | 7.1 to 16.9 s, median 9.0 s; link up after 1.5 to 5.8 s |
+| Foreground service refused | Never; no check-in ran inside the alarm |
+| Stopped part-way | Never |
+| Failures | None. 3 check-ins hit a Bluetooth status 133 (4 failed tries in all) and recovered on a retry; one needed all 3 tries |
+| Messages collected | 72, on Public, #testing, #bot, #weather and #cm-reach |
+| Watch battery | 100% to 92%: about 0.9% an hour, against about 2.3% an hour for Live in M0 |
+
+So Check-in is the background mode for M2: at this rate a 16-hour day of check-ins uses about 14% of the watch's battery.
+
+Things for step 2 to handle:
+
+- **Duplicates.** The same message can come twice: "🌀flux: Hey!" came twice in one check-in at 20:33, and a #bot reply first collected at 21:03 came again at 00:33. Storage should drop a message whose sender, channel, sent time and text match one it already has.
+- **Start-up on every check-in.** A check-in already closes as soon as the radio's queue is empty, yet with no new messages it still takes about 7 s, most of it after the link is up: each one reads the whole contact list (about 350) and all 40 channel slots before collecting. At 23:03 the radio did not answer the contact list request at all, which added 8 s. With contacts and channels stored, a check-in can ask only for contacts changed since the last one (the shared client already sends a "since" time, but a new client starts from zero) and read the channel slots once a day or when asked; that should shorten each one and save some battery.
+- **Little room on connection tries.** One check-in used all 3 tries. Step 2 can allow a fourth, a few seconds apart, since a check-in that fails waits 15 minutes for the next.
+
 Exact alarms need **Alarms & reminders**, which is off for new installs on Android 14. When Check-in is on and this is not allowed, the spike screen shows an **Allow alarms** button that opens the system page. If the watch has no such page, allow it from your computer:
 
 ```bash
