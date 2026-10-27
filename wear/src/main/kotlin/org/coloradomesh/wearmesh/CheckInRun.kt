@@ -17,17 +17,21 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.coloradomesh.meshcore.ble.RadioSession
-import org.coloradomesh.meshcore.protocol.Channel
-import org.coloradomesh.meshcore.protocol.ChannelMessage
 import org.coloradomesh.meshcore.protocol.CompanionClient
-import org.coloradomesh.meshcore.protocol.DirectMessage
+import org.coloradomesh.wearmesh.data.Storage
+import org.coloradomesh.wearmesh.data.SyncPlan
+import org.coloradomesh.wearmesh.data.SyncRecorder
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
-import java.util.concurrent.atomic.AtomicReference
 
 /**
- * One Check-in: connect to the radio, collect what it has queued, disconnect.
+ * One Check-in: connect to the radio, collect what it has queued into the message store,
+ * disconnect.
+ *
+ * Most check-ins are brief: contacts changed since the last one, no channel slots (see
+ * [SyncPlan]). "Check now", a radio the store does not know yet, and the first check-in of each
+ * day read everything. A check-in tries to connect [CONNECT_TRIES] times, one more than Live,
+ * since a failed one waits a whole interval for the next.
  *
  * Started by [CheckInService] (from the exact alarm [CheckIn] sets, or from "Check now"), or, if the
  * system will not start that service, inside the alarm itself by [CheckInAlarmReceiver]. Each run
@@ -45,9 +49,15 @@ object CheckInRun {
     /** For runs that outlive the caller, such as one inside an alarm broadcast. */
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    /** Long enough for 3 connection tries, pairing checks and reading a few hundred contacts. */
+    /** Long enough for 4 connection tries, pairing checks and reading a few hundred contacts. */
     const val TIME_LIMIT_MS = 90_000L
     private const val CLOSE_WAIT_MS = 5_000L
+
+    /** Night 2 of step 1 saw one check-in need all 3 tries after Bluetooth status 133. */
+    private const val CONNECT_TRIES = 4
+
+    /** How long to wait for the store to take what the check-in collected. */
+    private const val STORE_WAIT_MS = 10_000L
 
     /** The wake lock outlasts the time limit by this much, then lets go whatever happens. */
     private const val WAKE_MARGIN_MS = 15_000L
@@ -55,7 +65,8 @@ object CheckInRun {
     /** One check-in at a time in this process, however it was started. */
     private val running = AtomicBoolean(false)
 
-    suspend fun run(context: Context, why: String, timeLimitMs: Long = TIME_LIMIT_MS) {
+    /** [fullRead] asks for every channel slot and contact, as "Check now" does. */
+    suspend fun run(context: Context, why: String, timeLimitMs: Long = TIME_LIMIT_MS, fullRead: Boolean = false) {
         val app = context.applicationContext
         SpikeLog.init(app)
         if (!running.compareAndSet(false, true)) {
@@ -66,10 +77,10 @@ object CheckInRun {
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "WearMesh:check-in")
             .apply {
                 setReferenceCounted(false)
-                acquire(timeLimitMs + CLOSE_WAIT_MS + WAKE_MARGIN_MS)
+                acquire(timeLimitMs + CLOSE_WAIT_MS + 2 * STORE_WAIT_MS + WAKE_MARGIN_MS)
             }
         try {
-            checkIn(app, why, timeLimitMs)
+            checkIn(app, why, timeLimitMs, fullRead)
         } catch (e: CancellationException) {
             SpikeLog.log("Check-in ($why): stopped before it finished")
             throw e
@@ -79,7 +90,7 @@ object CheckInRun {
         }
     }
 
-    private suspend fun checkIn(app: Context, why: String, timeLimitMs: Long) {
+    private suspend fun checkIn(app: Context, why: String, timeLimitMs: Long, fullRead: Boolean) {
         val address = Prefs.of(app).getString(Prefs.RADIO_ADDRESS, null)
         if (address == null) {
             SpikeLog.log("Check-in ($why): skipped, no radio chosen yet")
@@ -96,42 +107,44 @@ object CheckInRun {
         val started = SystemClock.elapsedRealtime()
         SpikeLog.log("Check-in ($why): starting; ${conditions(app)}")
 
+        val store = Storage.store(app)
+        val plan = try {
+            withContext(Dispatchers.IO) {
+                Storage.call {
+                    // A different radio from the one the store holds clears the store first.
+                    store.useRadio(address)
+                    SyncPlan.decide(store.radio(), address, System.currentTimeMillis(), fullRead)
+                }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            SpikeLog.log("Check-in: could not read the store (${e.cause?.message ?: e.message}); reading everything")
+            SyncPlan(fullRead = true, contactsSince = 0)
+        }
+
         val outcome = CompletableDeferred<Outcome>()
         val closed = CompletableDeferred<String>()
         val linkUpAt = AtomicLong(0)
-        val received = AtomicInteger(0)
-        val channelNames = AtomicReference<Map<Int, String>>(emptyMap())
 
         // Called on the link's threads with the protocol client locked: nothing here may block.
         val listener = object : CompanionClient.Listener {
             override fun onLog(message: String) = SpikeLog.log("Check-in radio: $message")
 
-            override fun onChannels(channels: List<Channel>) {
-                channelNames.set(channels.associate { it.index to it.name })
-            }
-
-            override fun onChannelMessage(message: ChannelMessage) {
-                received.incrementAndGet()
-                val name = channelNames.get()[message.channelIndex] ?: "channel ${message.channelIndex}"
-                SpikeLog.log("Check-in: $name: ${message.text}")
-            }
-
-            override fun onDirectMessage(message: DirectMessage) {
-                received.incrementAndGet()
-                SpikeLog.log("Check-in: DM from ${message.senderPrefixHex}: ${message.text}")
-            }
-
             override fun onQueueEmpty() {
                 outcome.complete(Outcome.Drained)
             }
         }
+        val recorder = SyncRecorder(store, plan, Storage.writer, log = { SpikeLog.log("Check-in: $it") }, also = listener)
         val session = RadioSession(
             context = app,
             address = address,
-            listener = listener,
+            listener = recorder,
             appName = SpikeService.APP_NAME,
             onLog = { SpikeLog.log("Check-in link: $it") },
             onLinkReady = { linkUpAt.set(SystemClock.elapsedRealtime()) },
+            connectTries = CONNECT_TRIES,
+            startUp = plan.startUp,
             onClosed = { reason ->
                 closed.complete(reason)
                 outcome.complete(Outcome.Ended(reason))
@@ -150,21 +163,31 @@ object CheckInRun {
                     SpikeLog.log("Check-in: the link did not report closing within ${CLOSE_WAIT_MS / 1000} s")
                 }
             }
+            // Hand the store any contacts still gathered. Anything the radio sends after this, if
+            // the link was slow to close, is logged and not stored.
+            recorder.finish()
         }
+
+        // The link is closed, so no more writes are coming: wait for the store to take them.
+        val stored = withContext(NonCancellable + Dispatchers.IO) { Storage.flush(STORE_WAIT_MS) }
+        if (!stored) SpikeLog.log("Check-in: the store did not catch up within ${STORE_WAIT_MS / 1000} s")
+        Storage.refreshCounts(app)
 
         val total = (SystemClock.elapsedRealtime() - started) / 1000.0
         val battery = watchBattery(app)
+        val read = if (plan.fullRead) "full read" else "brief read"
+        val kept = "%d new messages, %d already stored".format(recorder.newMessages, recorder.duplicates)
         when (result) {
             Outcome.Drained -> {
                 val linkSeconds = (linkUpAt.get() - started) / 1000.0
                 SpikeLog.log(
-                    "Check-in: done in %.1f s (link up after %.1f s), %d new messages; watch battery %d%%"
-                        .format(total, linkSeconds, received.get(), battery),
+                    "Check-in: done in %.1f s (link up after %.1f s, %s), %s; watch battery %d%%"
+                        .format(total, linkSeconds, read, kept, battery),
                 )
             }
             is Outcome.Ended -> SpikeLog.log(
-                "Check-in: failed after %.1f s (%s); %d messages before that; watch battery %d%%"
-                    .format(total, result.reason, received.get(), battery),
+                "Check-in: failed after %.1f s (%s, %s); %s before that; watch battery %d%%"
+                    .format(total, result.reason, read, kept, battery),
             )
         }
     }

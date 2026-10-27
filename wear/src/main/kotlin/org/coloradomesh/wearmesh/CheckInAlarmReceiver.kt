@@ -35,7 +35,10 @@ class CheckInAlarmReceiver : BroadcastReceiver() {
     }
 
     private companion object {
-        /** Well inside the time a background broadcast is given. */
-        const val IN_ALARM_LIMIT_MS = 40_000L
+        /**
+         * With the worst-case waits for the store (10 s before, 10 s after) and for the link to
+         * close (5 s), this stays well inside the minute a background broadcast is given.
+         */
+        const val IN_ALARM_LIMIT_MS = 25_000L
     }
 }
