@@ -18,7 +18,7 @@ How to run the tests and what to record: [docs/M0-spike.md](docs/M0-spike.md) fo
 | --- | --- |
 | `meshcore-kotlin/` | A git submodule: the companion protocol in pure Kotlin, with its tests, and the Bluetooth link, shared with MeshCore TAK Bridge |
 | `wear/` | The Wear OS app: the M0 spike screen and its foreground service |
-| `docs/` | The design proposal and the test procedures; `docs/icon/` has the icon and the script that draws it (`python3 docs/icon/make_icon.py` after changing it) |
+| `docs/` | The design proposal and the test procedures; `docs/icon/` has the icon and the script that draws it (`python3 docs/icon/make_icon.py` after changing it), plus `social-preview.png` for GitHub |
 
 ## Build
 
