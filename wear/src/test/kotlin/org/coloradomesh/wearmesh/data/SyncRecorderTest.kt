@@ -253,4 +253,18 @@ class SyncRecorderTest {
             log,
         )
     }
+
+    @Test
+    fun reportsEachNewlyStoredMessageButNotRepeats() {
+        val reported = ArrayList<String>()
+        val recorder = SyncRecorder(
+            store, SyncPlan(false, 0), writer, { log.add(it) }, { now }, downstream, onStored = { reported.add(it.body) },
+        )
+        recorder.onChannelMessage(ChannelMessage(0, "Ann: one", 1_700_000_900))
+        recorder.onChannelMessage(ChannelMessage(0, "Ann: one", 1_700_000_900))
+        recorder.onDirectMessage(DirectMessage("a1b2c3d4e5f6", "two", 1_700_000_901))
+        assertTrue(reported.isEmpty())
+        runWrites()
+        assertEquals(listOf("one", "two"), reported)
+    }
 }

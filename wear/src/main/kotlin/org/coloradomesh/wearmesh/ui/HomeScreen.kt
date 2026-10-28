@@ -18,7 +18,9 @@ fun HomeScreen(
     rows: List<HomeRow>,
     now: Long,
     checkNowEnabled: Boolean,
+    offerCheckIn: Boolean,
     onCheckNow: () -> Unit,
+    onOfferAnswered: (switch: Boolean) -> Unit,
     onOpen: (HomeRow) -> Unit,
     onRadios: () -> Unit,
     onSettings: () -> Unit,
@@ -26,6 +28,12 @@ fun HomeScreen(
     ScreenList {
         item { ListHeader { Text(radioName ?: "WearMesh", maxLines = 1) } }
         item { Note(status) }
+        if (offerCheckIn) {
+            // The first-run offer (decided for M2): Live first, then the choice to save battery.
+            item { Note("Save battery: sync every 15 minutes instead of staying connected?") }
+            item { WideChip("Switch to Check-in") { onOfferAnswered(true) } }
+            item { WideChip("Not now", secondary = true) { onOfferAnswered(false) } }
+        }
         item { WideChip("Check now", secondary = true, enabled = checkNowEnabled) { onCheckNow() } }
         if (rows.isEmpty()) {
             item { Note("No channels yet. They appear after the first sync with the radio.") }

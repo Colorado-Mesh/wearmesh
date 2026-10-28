@@ -34,7 +34,9 @@ fun ConversationScreen(
     messages: List<MessageRow>,
     selfName: String?,
     now: Long,
+    notifyOn: Boolean,
     onSeen: () -> Unit,
+    onToggleNotify: () -> Unit,
 ) {
     val state = rememberScalingLazyListState()
     var placed by remember { mutableStateOf(false) }
@@ -50,6 +52,13 @@ fun ConversationScreen(
         item { ListHeader { Text(title, maxLines = 1) } }
         if (messages.isEmpty()) item { Note("No messages yet") }
         items(messages, key = { it.id }) { message -> MessageItem(message, selfName, now) }
+        item {
+            WideChip(
+                label = if (notifyOn) "Notifications: on" else "Notifications: off",
+                detail = "Tap to turn ${if (notifyOn) "off" else "on"}",
+                secondary = true,
+            ) { onToggleNotify() }
+        }
         item { Note("Replies come in a later version") }
     }
 }

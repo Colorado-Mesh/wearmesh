@@ -3,4 +3,6 @@
     <string name="app_name">WearMesh</string>
     <string name="channel_link">Radio link</string>
     <string name="channel_check_in">Check-in</string>
+    <string name="channel_direct">Direct messages</string>
+    <string name="channel_channels">Channels</string>
 </resources>

@@ -22,9 +22,12 @@ import org.coloradomesh.meshcore.protocol.Contact
 import org.coloradomesh.meshcore.protocol.DeviceInfo
 import org.coloradomesh.meshcore.protocol.DirectMessage
 import org.coloradomesh.meshcore.protocol.SelfInfo
+import org.coloradomesh.wearmesh.data.IncomingMessage
 import org.coloradomesh.wearmesh.data.Storage
 import org.coloradomesh.wearmesh.data.SyncPlan
 import org.coloradomesh.wearmesh.data.SyncRecorder
+import org.coloradomesh.wearmesh.notify.Notifier
+import java.util.Collections
 
 /**
  * Live mode: holds one link to a companion radio in a connectedDevice foreground service, so it
@@ -45,6 +48,9 @@ class SpikeService : Service() {
     private val main = Handler(Looper.getMainLooper())
     private var session: RadioSession? = null
     private var recorder: SyncRecorder? = null
+
+    /** Messages stored since the radio's queue was last emptied; notified together, on the storage thread. */
+    private val toNotify = Collections.synchronizedList(ArrayList<IncomingMessage>())
 
     /** Bumped for every new session, so callbacks from an older one are ignored. */
     private var generation = 0
@@ -109,7 +115,16 @@ class SpikeService : Service() {
         val store = Storage.store(this, target)
         // Queued ahead of everything this session writes.
         Storage.later { store.open() }
-        val sync = SyncRecorder(store, SyncPlan(fullRead = true, contactsSince = 0), Storage.writer, { SpikeLog.log(it) }, also = listener)
+        val sync = SyncRecorder(
+            store,
+            SyncPlan(fullRead = true, contactsSince = 0),
+            Storage.writer,
+            { SpikeLog.log(it) },
+            also = listener,
+            // Gathered and notified once the radio's queue is empty (see onQueueEmpty), so a burst
+            // after reconnecting is one update, not one per message.
+            onStored = { message -> toNotify.add(message) },
+        )
         recorder = sync
         val opened = RadioSession(
             context = this,
@@ -230,6 +245,17 @@ class SpikeService : Service() {
 
         override fun onQueueEmpty() {
             Storage.refreshCounts(this@SpikeService)
+            val radio = address ?: return
+            // Queued behind this collection's writes, so every message it stored is in the list. The
+            // queue waiting at connect after choosing a radio is its backlog: stored, not notified;
+            // from then on, new messages notify.
+            Storage.later {
+                val batch = synchronized(toNotify) { toNotify.toList().also { toNotify.clear() } }
+                val prefs = Prefs.of(this@SpikeService)
+                val backlog = prefs.getString(Prefs.QUIET_SYNC_RADIO, null) == radio
+                if (backlog) prefs.edit().remove(Prefs.QUIET_SYNC_RADIO).apply()
+                Notifier.afterSync(this@SpikeService, radio, batch, backlog)
+            }
         }
 
         override fun onBattery(millivolts: Int) {

@@ -4,6 +4,7 @@ import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.coloradomesh.wearmesh.data.Storage
+import org.coloradomesh.wearmesh.notify.Notifier
 
 /**
  * The radios this watch knows and the one it uses, kept in settings. Each radio keeps its own
@@ -38,12 +39,14 @@ object Radios {
             .putString(Prefs.RADIO_NAME, radio.name)
             .putString(Prefs.RADIOS, KnownRadios.format(known))
         if (switching) {
-            edit.remove(Prefs.SELF_NAME).remove(Prefs.LAST_SYNC_AT)
+            // Its next sync brings what queued while it was not in use: stored, but not notified.
+            edit.remove(Prefs.SELF_NAME).remove(Prefs.LAST_SYNC_AT).putString(Prefs.QUIET_SYNC_RADIO, radio.address)
             SyncStatus.reset()
         }
         edit.apply()
         Storage.refreshCounts(context)
         SpikeLog.log("Radio: now using ${radio.name} (${radio.address})")
+        Notifier.loadChoices(context, radio.address)
         load(context)
     }
 
@@ -59,6 +62,7 @@ object Radios {
         edit.apply()
         val store = Storage.store(context, address)
         Storage.later { store.forget() }
+        Notifier.clearChoices(context, address)
         Storage.refreshCounts(context)
         SpikeLog.log("Radio: forgot $address")
         load(context)

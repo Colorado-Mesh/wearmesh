@@ -19,9 +19,12 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.coloradomesh.meshcore.ble.RadioSession
 import org.coloradomesh.meshcore.protocol.CompanionClient
 import org.coloradomesh.meshcore.protocol.SelfInfo
+import org.coloradomesh.wearmesh.data.IncomingMessage
 import org.coloradomesh.wearmesh.data.Storage
 import org.coloradomesh.wearmesh.data.SyncPlan
 import org.coloradomesh.wearmesh.data.SyncRecorder
+import org.coloradomesh.wearmesh.notify.Notifier
+import java.util.Collections
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
@@ -154,7 +157,16 @@ object CheckInRun {
                 outcome.complete(Outcome.Drained)
             }
         }
-        val recorder = SyncRecorder(store, plan, Storage.writer, log = { SpikeLog.log("Check-in: $it") }, also = listener)
+        // Collected on the storage thread, notified about once the check-in is over.
+        val newlyStored = Collections.synchronizedList(ArrayList<IncomingMessage>())
+        val recorder = SyncRecorder(
+            store,
+            plan,
+            Storage.writer,
+            log = { SpikeLog.log("Check-in: $it") },
+            also = listener,
+            onStored = { newlyStored.add(it) },
+        )
         val session = RadioSession(
             context = app,
             address = address,
@@ -191,6 +203,14 @@ object CheckInRun {
         val stored = withContext(NonCancellable + Dispatchers.IO) { Storage.flush(STORE_WAIT_MS) }
         if (!stored) SpikeLog.log("Check-in: the store did not catch up within ${STORE_WAIT_MS / 1000} s")
         Storage.refreshCounts(app)
+
+        // The first sync after choosing a radio brings its backlog, which does not notify (decided
+        // for step 4); once that sync has collected the queue, later messages do.
+        val prefs = Prefs.of(app)
+        val backlog = prefs.getString(Prefs.QUIET_SYNC_RADIO, null) == address
+        if (backlog && result == Outcome.Drained) prefs.edit().remove(Prefs.QUIET_SYNC_RADIO).apply()
+        val toNotify = synchronized(newlyStored) { newlyStored.toList() }
+        Storage.later { Notifier.afterSync(app, address, toNotify, backlog) }
 
         val total = (SystemClock.elapsedRealtime() - started) / 1000.0
         val battery = watchBattery(app)
