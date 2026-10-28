@@ -60,11 +60,10 @@ fun ConfirmScreen(title: String, explanation: String, action: String, onConfirm:
 
 /** After forgetting: an app cannot unpair a device, so this points to where the user can. */
 @Composable
-fun ForgottenScreen(messagesDeleted: Boolean, onBluetoothSettings: () -> Unit, onDone: () -> Unit) {
+fun ForgottenScreen(onBluetoothSettings: () -> Unit, onDone: () -> Unit) {
     ScreenList {
         item { ListHeader { Text("Forgotten") } }
-        val deleted = if (messagesDeleted) "Its messages are deleted. " else ""
-        item { Note("${deleted}To unpair it too, forget it in the watch's Bluetooth settings.") }
+        item { Note("Its messages are deleted. To unpair it too, forget it in the watch's Bluetooth settings.") }
         item { WideChip("Bluetooth settings", secondary = true) { onBluetoothSettings() } }
         item { WideChip("Done") { onDone() } }
     }

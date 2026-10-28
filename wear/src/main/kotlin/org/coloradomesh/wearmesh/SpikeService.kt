@@ -106,15 +106,9 @@ class SpikeService : Service() {
         val target = address ?: return
         val mine = ++generation
         contactsSeen = 0
-        val store = Storage.store(this)
-        // Queued ahead of everything this session writes; a different radio clears the store.
-        Storage.writer.execute {
-            try {
-                store.useRadio(target)
-            } catch (e: Exception) {
-                SpikeLog.log("Storage failed: ${e.message}")
-            }
-        }
+        val store = Storage.store(this, target)
+        // Queued ahead of everything this session writes.
+        Storage.later { store.open() }
         val sync = SyncRecorder(store, SyncPlan(fullRead = true, contactsSince = 0), Storage.writer, { SpikeLog.log(it) }, also = listener)
         recorder = sync
         val opened = RadioSession(

@@ -5,31 +5,36 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-/** The one radio the store holds data from; a single row. */
-@Entity(tableName = "radio")
+/**
+ * A radio the store holds data from, with its sync state. Every other table is keyed by the
+ * radio's address too, so each radio keeps its own history (decided 28 October, replacing the
+ * single history of step 2).
+ */
+@Entity(tableName = "radios")
 data class RadioRow(
-    @PrimaryKey val id: Int = ONLY,
-    val address: String,
+    @PrimaryKey val address: String,
     @ColumnInfo(name = "contacts_since") val contactsSince: Long = 0,
     @ColumnInfo(name = "full_read_at") val fullReadAt: Long = 0,
-) {
-    companion object {
-        const val ONLY = 1
-    }
-}
+)
 
 /** A programmed channel slot. Names and kinds only: channel keys never leave the radio. */
-@Entity(tableName = "channels")
+@Entity(tableName = "channels", primaryKeys = ["radio", "slot"])
 data class ChannelRow(
-    @PrimaryKey val slot: Int,
+    val radio: String,
+    val slot: Int,
     val name: String,
     /** A [org.coloradomesh.meshcore.protocol.Channel.Kind] name. */
     val kind: String,
 )
 
-@Entity(tableName = "contacts", indices = [Index("prefix")])
+@Entity(
+    tableName = "contacts",
+    primaryKeys = ["radio", "public_key"],
+    indices = [Index(value = ["radio", "prefix"])],
+)
 data class ContactRow(
-    @PrimaryKey @ColumnInfo(name = "public_key") val publicKey: String,
+    val radio: String,
+    @ColumnInfo(name = "public_key") val publicKey: String,
     /** The first 12 hex characters of the key: all a direct message gives of its sender. */
     val prefix: String,
     val name: String,
@@ -41,19 +46,21 @@ data class ContactRow(
 
 /**
  * One received message. The unique index is what keeps a message from being stored twice: the
- * same conversation, sender, sent time and text. [sender] is never null, since SQLite treats
- * nulls as all different in a unique index.
+ * same radio, conversation, sender, sent time and text. [sender] is never null, since SQLite
+ * treats nulls as all different in a unique index.
  */
 @Entity(
     tableName = "messages",
     indices = [
-        Index(value = ["conversation", "sent_at", "sender", "body"], unique = true),
-        Index(value = ["conversation", "id"]),
+        Index(value = ["radio", "conversation", "sent_at", "sender", "body"], unique = true),
+        Index(value = ["radio", "conversation", "id"]),
     ],
 )
 data class MessageRow(
     /** Grows with each message stored, so it gives the order messages arrived in. */
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    /** The address of the radio it came through. */
+    val radio: String,
     val conversation: String,
     val sender: String,
     val body: String,

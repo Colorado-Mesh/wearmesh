@@ -11,7 +11,7 @@ import androidx.room.RoomDatabase
  */
 @Database(
     entities = [RadioRow::class, ChannelRow::class, ContactRow::class, MessageRow::class],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class WearMeshDatabase : RoomDatabase() {

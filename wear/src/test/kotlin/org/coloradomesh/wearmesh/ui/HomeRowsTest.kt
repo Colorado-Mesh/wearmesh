@@ -7,9 +7,9 @@ import org.junit.Test
 
 class HomeRowsTest {
     private val channels = listOf(
-        ChannelRow(3, "#testing", "HASHTAG"),
-        ChannelRow(0, "Public", "PUBLIC"),
-        ChannelRow(5, "Team", "PRIVATE"),
+        ChannelRow("F3:9E:35:24:99:76", 3, "#testing", "HASHTAG"),
+        ChannelRow("F3:9E:35:24:99:76", 0, "Public", "PUBLIC"),
+        ChannelRow("F3:9E:35:24:99:76", 5, "Team", "PRIVATE"),
     )
 
     private fun last(conversation: String, at: Long, unread: Int = 0, sender: String = "Ann", contact: String? = null) =

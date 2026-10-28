@@ -25,7 +25,7 @@ Decided for step 3: Home lists direct messages first, then channels by slot, so 
 - **Screens update as messages are stored**: Home and the conversation view watch the database, so a check-in in the background changes what is on screen.
 - **Unread** means not seen in its conversation yet. The count shows on Home; opening the conversation clears it.
 - **Times** are when the watch received each message: "now", "4 min", "2 h", then the weekday, then the date. A sender's own clock can be far off.
-- **Radios.** The watch keeps a list of up to 8 radios and uses one. Switching to another asks first, since it deletes the stored messages (decided for M2: one history). Forgetting the radio in use deletes its messages too, and leaves the watch on Welcome; forgetting another only takes it off the list. Either way the watch's Bluetooth settings are offered for unpairing, which an app cannot do itself. If Live holds the radio when switching or forgetting, it is stopped first.
+- **Radios.** The watch keeps a list of up to 8 radios and uses one. Each radio keeps its own history (decided 28 October, after trying step 3 on the watch): switching shows the chosen radio's stored messages, channels and contacts, and switching back shows the first radio's again, plus whatever its next sync brings. Only the radio in use is synced, and a radio's own queue of waiting messages is limited, so a radio left unused for long can miss some. Forgetting a radio deletes its history and takes it off the list; forgetting the one in use leaves the watch on Welcome. The watch's Bluetooth settings are offered for unpairing, which an app cannot do itself. If Live holds the radio when switching or forgetting, it is stopped first.
 - **Read channels and contacts again** waits while a sync is under way, such as the one when the app opens.
 - **Mentions** of this radio are found by its node name, saved from the radio's greeting at each sync.
 - The **dictation test** is gone until M3 needs it, with its speech and network permissions.
@@ -39,7 +39,7 @@ Install the build and open WearMesh. It should land on Home with your radio, sin
 3. **Live updates.** Leave a busy channel open across a scheduled check-in; new messages should appear without reopening it.
 4. **Mentions.** A message mentioning your radio's name, such as `@[🔥 W0RMT 02]`, shows in the accent colour.
 5. **Settings.** Change the interval to 30 and back to 15; the log in Diagnostics shows `Check-in: every 30 min` and the next alarm. **Read channels and contacts again** should log a `full read`.
-6. **Radios.** Add the test radio through **Add a radio**: it should ask before switching and, once switched, Home should start empty and fill after the sync. Switch back the same way. Then forget the test radio from the list (not in use): it should only leave the list.
+6. **Radios.** Add the test radio through **Add a radio**; Home should fill from it after the sync. Switch back to your radio: its messages should still be there. Switch to the test radio again: its messages should be there too. Then forget the test radio: its history goes, your radio's stays.
 7. **Check-in overnight** as before, to see the hourly full reads: about one `full read` line an hour in the log.
 
 Note anything that is hard to read or reach on the round screen; layout is the part most likely to need a second pass.

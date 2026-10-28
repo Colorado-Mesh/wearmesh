@@ -6,8 +6,8 @@ import kotlinx.coroutines.flow.StateFlow
 import org.coloradomesh.wearmesh.data.Storage
 
 /**
- * The radios this watch knows and the one it uses, kept in settings. Switching radios or
- * forgetting the one in use clears the message store (decided for M2): one history, one radio.
+ * The radios this watch knows and the one it uses, kept in settings. Each radio keeps its own
+ * stored history, so switching loses nothing; forgetting a radio deletes its history.
  */
 object Radios {
     data class State(val known: List<KnownRadio> = emptyList(), val chosen: KnownRadio? = null)
@@ -28,10 +28,7 @@ object Radios {
         return State(known, chosen).also { current.value = it }
     }
 
-    /**
-     * Makes [radio] the one in use and puts it first in the list. A different radio from the one
-     * whose messages are stored clears the store now, so its messages are not shown as the new one's.
-     */
+    /** Makes [radio] the one in use and puts it first in the list. Its stored history, if any, shows again. */
     fun choose(context: Context, radio: KnownRadio) {
         val prefs = Prefs.of(context)
         val switching = prefs.getString(Prefs.RADIO_ADDRESS, null) != radio.address
@@ -45,22 +42,12 @@ object Radios {
             SyncStatus.reset()
         }
         edit.apply()
-        val store = Storage.store(context)
-        Storage.later { store.useRadio(radio.address) }
         Storage.refreshCounts(context)
         SpikeLog.log("Radio: now using ${radio.name} (${radio.address})")
         load(context)
     }
 
-    /** Adds [radio] to the list without using it yet, so a confirmation screen can name it. */
-    fun remember(context: Context, radio: KnownRadio) {
-        val prefs = Prefs.of(context)
-        val known = KnownRadios.add(KnownRadios.parse(prefs.getString(Prefs.RADIOS, null)), radio)
-        prefs.edit().putString(Prefs.RADIOS, KnownRadios.format(known)).apply()
-        load(context)
-    }
-
-    /** Removes [address] from the list; if it was in use, deletes its messages and leaves no radio chosen. */
+    /** Removes [address] from the list and deletes its stored history; if it was in use, leaves no radio chosen. */
     fun forget(context: Context, address: String) {
         val prefs = Prefs.of(context)
         val known = KnownRadios.remove(KnownRadios.parse(prefs.getString(Prefs.RADIOS, null)), address)
@@ -70,8 +57,8 @@ object Radios {
             SyncStatus.reset()
         }
         edit.apply()
-        val store = Storage.store(context)
-        Storage.later { store.forget(address) }
+        val store = Storage.store(context, address)
+        Storage.later { store.forget() }
         Storage.refreshCounts(context)
         SpikeLog.log("Radio: forgot $address")
         load(context)
