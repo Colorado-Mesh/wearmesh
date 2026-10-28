@@ -14,8 +14,8 @@ android {
         // Wear OS 4: the Android 12 Bluetooth permissions and notification permission always apply.
         minSdk = 33
         targetSdk = 34
-        versionCode = 4
-        versionName = "0.0.4-m2-step2"
+        versionCode = 5
+        versionName = "0.0.5-m2-step3"
     }
 
     buildTypes {
@@ -57,8 +57,11 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.wear.compose.material)
     implementation(libs.wear.compose.foundation)
+    implementation(libs.wear.compose.navigation)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.room.runtime)
+    // Flow queries, so the screens update as check-ins store messages.
+    implementation(libs.room.ktx)
     ksp(libs.room.compiler)
 
     testImplementation(libs.junit)

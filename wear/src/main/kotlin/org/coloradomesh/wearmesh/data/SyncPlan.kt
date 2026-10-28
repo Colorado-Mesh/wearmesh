@@ -16,14 +16,16 @@ data class SyncPlan(val fullRead: Boolean, val contactsSince: Long) {
     companion object {
         /**
          * How often a brief check-in becomes a full read anyway: picks up renamed or new channels,
-         * and drops contacts the radio has removed, which a read of changes never reports.
+         * and drops contacts the radio has removed, which a read of changes never reports. Hourly
+         * (decided for step 3): one check-in in four at the default interval, about 10 s instead
+         * of 3, and the 24-hour test of step 2 showed check-in length barely moves battery use.
          */
-        const val FULL_READ_EVERY_MS = 24 * 60 * 60_000L
+        const val FULL_READ_EVERY_MS = 60 * 60_000L
 
         /**
-         * A full read when asked for ([wanted]: Live, or "Check now"), when the store holds
-         * nothing from this radio, or when the last full read is a day old or the clock has gone
-         * back past it; otherwise a brief one.
+         * A full read when asked for ([wanted]: Live, or "Read channels and contacts again"),
+         * when the store holds nothing from this radio, or when the last full read is an hour old
+         * or the clock has gone back past it; otherwise a brief one.
          */
         fun decide(stored: StoredRadio?, address: String, now: Long, wanted: Boolean): SyncPlan {
             val known = stored != null && stored.address == address && stored.fullReadAt > 0

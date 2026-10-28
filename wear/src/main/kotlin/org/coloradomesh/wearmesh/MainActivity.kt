@@ -1,62 +1,68 @@
 package org.coloradomesh.wearmesh
 
 import android.Manifest
-import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Bundle
-import android.os.SystemClock
 import android.provider.Settings
-import android.speech.RecognizerIntent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
-import androidx.wear.compose.foundation.lazy.items
-import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
-import androidx.wear.compose.material.Chip
-import androidx.wear.compose.material.ChipDefaults
-import androidx.wear.compose.material.ListHeader
+import androidx.lifecycle.lifecycleScope
 import androidx.wear.compose.material.MaterialTheme
-import androidx.wear.compose.material.PositionIndicator
-import androidx.wear.compose.material.Scaffold
-import androidx.wear.compose.material.Text
-import androidx.wear.compose.material.TimeText
+import androidx.wear.compose.navigation.SwipeDismissableNavHost
+import androidx.wear.compose.navigation.composable
+import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.coloradomesh.meshcore.ble.FoundRadio
 import org.coloradomesh.meshcore.ble.RadioScanner
+import org.coloradomesh.wearmesh.data.ConversationLast
 import org.coloradomesh.wearmesh.data.Storage
+import org.coloradomesh.wearmesh.ui.ConfirmScreen
+import org.coloradomesh.wearmesh.ui.ConversationScreen
+import org.coloradomesh.wearmesh.ui.DiagnosticsScreen
+import org.coloradomesh.wearmesh.ui.FindRadioScreen
+import org.coloradomesh.wearmesh.ui.ForgottenScreen
+import org.coloradomesh.wearmesh.ui.HomeRows
+import org.coloradomesh.wearmesh.ui.HomeScreen
+import org.coloradomesh.wearmesh.ui.RadioScreen
+import org.coloradomesh.wearmesh.ui.RadiosScreen
+import org.coloradomesh.wearmesh.ui.SettingsScreen
+import org.coloradomesh.wearmesh.ui.SettingsState
+import org.coloradomesh.wearmesh.ui.WelcomeScreen
 
 /**
- * The spike's one screen: find and pick a radio, connect or disconnect (Live), turn the background
- * Check-in on or off or run one now, test dictation, and watch what the radio reports and what
- * the watch has stored. The Live link lives in [SpikeService]; Check-in runs in [CheckInService].
+ * The app's one activity: the screens (see docs/M2-step3-screens.md and the `ui` package), and
+ * what they need from Android, such as Bluetooth permission, scanning, and the system's settings
+ * pages. Live runs in [SpikeService]; Check-in in [CheckInService]. Opening the app syncs.
  */
 class MainActivity : ComponentActivity() {
     private lateinit var scanner: RadioScanner
     private val found = mutableStateListOf<FoundRadio>()
     private var scanning by mutableStateOf(false)
     private var notice by mutableStateOf<String?>(null)
-    private val prefs by lazy { Prefs.of(this) }
     private var checkInOn by mutableStateOf(false)
+    private var intervalMinutes by mutableStateOf(15)
     private var exactAlarmsAllowed by mutableStateOf(true)
-    private var dictationStartedAt = 0L
+
+    /** Whether the last radio forgotten was the one in use, so its messages were deleted. */
+    private var forgotInUse by mutableStateOf(false)
 
     /** What to do once permissions are granted. */
     private var afterPermissions: (() -> Unit)? = null
@@ -71,22 +77,21 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private val dictation = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        val seconds = (SystemClock.elapsedRealtime() - dictationStartedAt) / 1000.0
-        val text = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
-        when {
-            result.resultCode == Activity.RESULT_OK && text != null ->
-                SpikeLog.log("M0 dictation (%.1f s, network: %s): \"%s\"".format(seconds, networkNow(), text))
-            else -> SpikeLog.log("M0 dictation: no result after %.1f s (network: %s)".format(seconds, networkNow()))
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         SpikeLog.init(this)
         scanner = RadioScanner(this)
         checkInOn = CheckIn.isOn(this)
-        setContent { MaterialTheme { SpikeScreen() } }
+        intervalMinutes = CheckIn.intervalMinutes(this)
+        Radios.load(this)
+        SyncStatus.load(this)
+        val start = if (Radios.state.value?.chosen != null) HOME else WELCOME
+        setContent { MaterialTheme { App(start) } }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        syncOnOpen()
     }
 
     override fun onResume() {
@@ -100,6 +105,23 @@ class MainActivity : ComponentActivity() {
         scanner.stop()
         scanning = false
         super.onStop()
+    }
+
+    /**
+     * Opening the app syncs (decided for M2), unless Live holds the radio, a sync is running, or
+     * one ended, worked or not, in the last [OPEN_SYNC_GAP_MS]: a watch comes on screen at every
+     * glance, and a radio that is not answering should not be tried at each one.
+     */
+    private fun syncOnOpen() {
+        if (Radios.state.value?.chosen == null || SpikeState.state.value.running || !hasBluetoothPermission()) return
+        val status = SyncStatus.state.value
+        val lastEnded = maxOf(status.lastSyncAt, status.lastAttemptAt)
+        if (status.syncing || System.currentTimeMillis() - lastEnded < OPEN_SYNC_GAP_MS) return
+        try {
+            CheckIn.onOpen(this)
+        } catch (e: IllegalStateException) {
+            SpikeLog.log("Check-in (app opened): could not start (${e.message})")
+        }
     }
 
     private fun hasBluetoothPermission(): Boolean =
@@ -118,7 +140,7 @@ class MainActivity : ComponentActivity() {
             arrayOf(
                 Manifest.permission.BLUETOOTH_SCAN,
                 Manifest.permission.BLUETOOTH_CONNECT,
-                // Without it the service still runs; its notification just is not shown.
+                // Without it the services still run; their notifications just are not shown.
                 Manifest.permission.POST_NOTIFICATIONS,
             ),
         )
@@ -136,186 +158,276 @@ class MainActivity : ComponentActivity() {
             },
             onDone = { error ->
                 scanning = false
-                notice = error ?: if (found.isEmpty()) "No radios found. Is another app connected to it?" else null
+                notice = error ?: if (found.isEmpty()) "No radios found. Is another device connected to it?" else null
             },
         )
     }
 
-    private fun connect(address: String, name: String) = withPermissions {
+    /** Uses [radio], then syncs with it. Live is stopped first, and waited for, so it writes nothing more. */
+    private fun use(radio: KnownRadio) = withPermissions {
         scanner.stop()
         scanning = false
-        found.clear()
-        notice = null
-        prefs.edit().putString(Prefs.RADIO_ADDRESS, address).putString(Prefs.RADIO_NAME, name).apply()
-        SpikeService.connect(this, address)
+        afterLiveStops {
+            Radios.choose(this, radio)
+            CheckIn.now(this)
+        }
+    }
+
+    private fun forget(address: String) {
+        forgotInUse = Radios.state.value?.chosen?.address == address
+        if (forgotInUse) afterLiveStops { Radios.forget(this, address) } else Radios.forget(this, address)
+    }
+
+    /**
+     * Runs [action] once Live has stopped, stopping it first if it is running. Stopping only asks
+     * the service, so this waits until it says it is down, up to [LIVE_STOP_WAIT_MS].
+     */
+    private fun afterLiveStops(action: () -> Unit) {
+        if (!SpikeState.state.value.running) {
+            action()
+            return
+        }
+        SpikeService.stop(this)
+        lifecycleScope.launch {
+            if (withTimeoutOrNull(LIVE_STOP_WAIT_MS) { SpikeState.state.first { !it.running } } == null) {
+                SpikeLog.log("Live did not stop within ${LIVE_STOP_WAIT_MS / 1000} s; carrying on")
+            }
+            action()
+        }
     }
 
     private fun toggleCheckIn() = withPermissions {
         checkInOn = !checkInOn
         CheckIn.setOn(this, checkInOn)
         exactAlarmsAllowed = CheckIn.exactAlarmsAllowed(this)
-        if (checkInOn && !exactAlarmsAllowed) notice = "Allow \"Alarms & reminders\" so Check-in can run while the watch sleeps"
     }
 
-    private fun checkNow() = withPermissions {
-        CheckIn.now(this)
-        notice = "Check-in started; watch the log"
+    private fun toggleLive() = withPermissions {
+        val radio = Radios.state.value?.chosen ?: return@withPermissions
+        if (SpikeState.state.value.running) SpikeService.stop(this) else SpikeService.connect(this, radio.address)
     }
 
-    /** Opens the system page where the user allows exact alarms for this app. */
-    private fun openAlarmSettings() {
+    private fun openSettingsPage(action: String, withPackage: Boolean) {
         try {
-            startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName")))
+            val intent = Intent(action)
+            if (withPackage) intent.data = Uri.parse("package:$packageName")
+            startActivity(intent)
         } catch (e: ActivityNotFoundException) {
-            notice = "This watch has no page for it; allow it with adb (see docs/M2-step1-check-in.md)"
-        }
-    }
-
-    private fun testDictation() {
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            .putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
-            .putExtra(RecognizerIntent.EXTRA_PROMPT, "Say a test message")
-        try {
-            dictationStartedAt = SystemClock.elapsedRealtime()
-            dictation.launch(intent)
-        } catch (e: ActivityNotFoundException) {
-            SpikeLog.log("M0 dictation: this watch has no speech recognizer")
-        }
-    }
-
-    /** Whether the watch has any network right now, and over what; the dictation test records it. */
-    private fun networkNow(): String {
-        val manager = getSystemService(ConnectivityManager::class.java)
-        val caps = manager.getNetworkCapabilities(manager.activeNetwork) ?: return "none"
-        return when {
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "Wi-Fi"
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "cellular"
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_BLUETOOTH) -> "phone over Bluetooth"
-            else -> "other"
+            notice = "This watch has no page for that"
         }
     }
 
     @Composable
-    private fun SpikeScreen() {
-        val state by SpikeState.state.collectAsStateWithLifecycle()
-        val lines by SpikeLog.lines.collectAsStateWithLifecycle()
-        val stored by Storage.counts.collectAsStateWithLifecycle()
-        val listState = rememberScalingLazyListState()
-        val savedAddress = prefs.getString(Prefs.RADIO_ADDRESS, null)
-        val savedName = prefs.getString(Prefs.RADIO_NAME, null) ?: savedAddress
+    private fun App(start: String) {
+        val nav = rememberSwipeDismissableNavController()
+        val radios by Radios.state.collectAsState()
+        val link by SpikeState.state.collectAsStateWithLifecycle()
+        val sync by SyncStatus.state.collectAsStateWithLifecycle()
+        val dao = remember { Storage.dao(this) }
+        val now = rememberNow()
+        val goHome = { nav.navigate(HOME) { popUpTo(nav.graph.id) { inclusive = true } } }
 
-        Scaffold(
-            timeText = { TimeText() },
-            positionIndicator = { PositionIndicator(scalingLazyListState = listState) },
-        ) {
-            ScalingLazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 8.dp, top = 32.dp, end = 8.dp, bottom = 48.dp),
-            ) {
-                item { ListHeader { Text("WearMesh spike") } }
-                item {
-                    Text(
-                        text = listOfNotNull(state.radioName, state.link).joinToString(" · "),
-                        textAlign = TextAlign.Center,
-                        style = MaterialTheme.typography.caption1,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
+        SwipeDismissableNavHost(navController = nav, startDestination = start) {
+            composable(WELCOME) { WelcomeScreen(onFind = { nav.navigate(FIND) }) }
 
-                if (state.running) {
-                    item { WideChip("Disconnect", secondary = true) { SpikeService.stop(this@MainActivity) } }
+            composable(HOME) {
+                val channels by remember { dao.channelsFlow() }.collectAsStateWithLifecycle(emptyList())
+                val lasts by remember { dao.lastMessagesFlow() }.collectAsStateWithLifecycle(emptyList<ConversationLast>())
+                HomeScreen(
+                    radioName = radios?.chosen?.name,
+                    status = HomeRows.status(
+                        liveLink = link.link.takeIf { link.running },
+                        syncing = sync.syncing,
+                        problem = sync.problem?.let { SyncStatus.explain(it) },
+                        lastSyncAt = sync.lastSyncAt,
+                        now = now,
+                    ),
+                    rows = HomeRows.build(channels, lasts),
+                    now = now,
+                    checkNowEnabled = !link.running && !sync.syncing,
+                    onCheckNow = { withPermissions { CheckIn.now(this@MainActivity) } },
+                    onOpen = { row -> nav.navigate("$CONVERSATION/${Uri.encode(row.conversation)}/${Uri.encode(row.title)}") },
+                    onRadios = { nav.navigate(RADIOS) },
+                    onSettings = { nav.navigate(SETTINGS) },
+                )
+            }
+
+            composable("$CONVERSATION/{key}/{title}") { entry ->
+                val key = entry.arguments?.getString("key").orEmpty()
+                val title = entry.arguments?.getString("title").orEmpty()
+                val messages by remember(key) { dao.messagesFlow(key) }.collectAsStateWithLifecycle(emptyList())
+                ConversationScreen(
+                    title = title,
+                    messages = messages,
+                    selfName = remember { Prefs.of(this@MainActivity).getString(Prefs.SELF_NAME, null) },
+                    now = now,
+                    onSeen = { Storage.later { dao.markRead(key) } },
+                )
+            }
+
+            composable(RADIOS) {
+                RadiosScreen(
+                    known = radios?.known.orEmpty(),
+                    chosen = radios?.chosen?.address,
+                    onOpen = { radio -> nav.navigate("$RADIO/${Uri.encode(radio.address)}") },
+                    onAdd = { nav.navigate(FIND) },
+                )
+            }
+
+            composable("$RADIO/{address}") { entry ->
+                val address = entry.arguments?.getString("address").orEmpty()
+                val radio = radios?.known?.firstOrNull { it.address == address }
+                if (radio == null) {
+                    LaunchedEffect(Unit) { nav.popBackStack() }
                 } else {
-                    if (savedAddress != null) {
-                        item { WideChip("Connect", detail = savedName) { connect(savedAddress, savedName ?: savedAddress) } }
-                    }
-                    item { WideChip(if (scanning) "Scanning…" else "Scan for radios", secondary = true, enabled = !scanning) { scan() } }
-                    items(found, key = { it.address }) { radio ->
-                        val signal = if (radio.rssi != 0) "${radio.rssi} dBm" else radio.address
-                        WideChip(radio.name, detail = signal) { connect(radio.address, radio.name) }
-                    }
-                }
-                notice?.let { text -> item { Text(text, textAlign = TextAlign.Center, style = MaterialTheme.typography.caption2) } }
-
-                if (savedAddress != null) {
-                    item {
-                        WideChip(
-                            label = if (checkInOn) "Check-in: on" else "Check-in: off",
-                            detail = "Every ${CheckIn.INTERVAL_MINUTES} min, also while the watch sleeps",
-                            secondary = !checkInOn,
-                        ) { toggleCheckIn() }
-                    }
-                    if (checkInOn && !exactAlarmsAllowed) {
-                        item { WideChip("Allow alarms", detail = "Needed for Check-in") { openAlarmSettings() } }
-                    }
-                    item {
-                        WideChip(
-                            label = "Check now",
-                            // The radio serves one client, so a check-in cannot run while Live holds it.
-                            detail = if (state.running) "Disconnect Live first" else null,
-                            secondary = true,
-                            enabled = !state.running,
-                        ) { checkNow() }
-                    }
-                }
-
-                item { WideChip("Test dictation", secondary = true) { testDictation() } }
-
-                item {
-                    val facts = listOfNotNull(
-                        state.firmware?.let { "Firmware $it" },
-                        state.packetSize?.let { "Packet size $it B" },
-                        "Contacts ${state.contacts} · Messages ${state.messages}",
-                        state.radioMillivolts?.let { "Radio battery $it mV" },
-                        stored?.let {
-                            "Stored: ${it.messages} messages in ${it.conversations} conversations, " +
-                                "${it.channels} channels, ${it.contacts} contacts"
+                    RadioScreen(
+                        radio = radio,
+                        inUse = radios?.chosen?.address == address,
+                        onUse = {
+                            // With no radio in use there are no messages to lose, so no need to ask.
+                            if (radios?.chosen == null) {
+                                use(radio)
+                                goHome()
+                            } else {
+                                nav.navigate("$CONFIRM_USE/${Uri.encode(address)}")
+                            }
                         },
+                        onForget = { nav.navigate("$CONFIRM_FORGET/${Uri.encode(address)}") },
                     )
-                    Text(facts.joinToString("\n"), textAlign = TextAlign.Center, style = MaterialTheme.typography.caption2)
                 }
+            }
 
-                if (state.channels.isNotEmpty()) {
-                    item { ListHeader { Text("Channels (${state.channels.size})") } }
-                    items(state.channels, key = { it.index }) { channel ->
-                        Text("${channel.index}  ${channel.name}", style = MaterialTheme.typography.caption1, modifier = Modifier.fillMaxWidth())
-                    }
-                }
+            composable(FIND) {
+                LaunchedEffect(Unit) { scan() }
+                FindRadioScreen(
+                    scanning = scanning,
+                    found = found,
+                    notice = notice,
+                    onScan = { scan() },
+                    onPick = { picked ->
+                        val radio = KnownRadio(picked.address, picked.name)
+                        val current = radios?.chosen
+                        when {
+                            // Nothing stored yet to lose, or the same radio again.
+                            current == null || current.address == radio.address -> {
+                                use(radio)
+                                goHome()
+                            }
+                            else -> {
+                                Radios.remember(this@MainActivity, radio)
+                                nav.navigate("$CONFIRM_USE/${Uri.encode(radio.address)}")
+                            }
+                        }
+                    },
+                )
+            }
 
-                item { ListHeader { Text("Log") } }
-                // No keys: two identical lines in the same millisecond would make duplicate keys.
-                items(lines.take(SHOWN_LOG_LINES)) { line ->
-                    Text("${SpikeLog.clock(line.at)} ${line.text}", style = MaterialTheme.typography.caption3, modifier = Modifier.fillMaxWidth())
-                }
-                item { WideChip("Clear log", secondary = true) { SpikeLog.clear() } }
+            composable("$CONFIRM_USE/{address}") { entry ->
+                val address = entry.arguments?.getString("address").orEmpty()
+                val radio = radios?.known?.firstOrNull { it.address == address }
+                ConfirmScreen(
+                    title = "Use ${radio?.name ?: address}?",
+                    explanation = "The watch keeps one radio's messages. Switching deletes the ones stored now; " +
+                        "the new radio's waiting messages come in at the next sync.",
+                    action = "Use this radio",
+                    onConfirm = {
+                        if (radio != null) use(radio)
+                        goHome()
+                    },
+                    onCancel = { nav.popBackStack() },
+                )
+            }
+
+            composable("$CONFIRM_FORGET/{address}") { entry ->
+                val address = entry.arguments?.getString("address").orEmpty()
+                val radio = radios?.known?.firstOrNull { it.address == address }
+                val inUse = radios?.chosen?.address == address
+                ConfirmScreen(
+                    title = "Forget ${radio?.name ?: address}?",
+                    explanation = if (inUse) "Its stored messages are deleted, and the watch stops syncing with it." else "It is removed from the list.",
+                    action = "Forget",
+                    onConfirm = {
+                        forget(address)
+                        nav.navigate(FORGOTTEN) { popUpTo(RADIOS) }
+                    },
+                    onCancel = { nav.popBackStack() },
+                )
+            }
+
+            composable(FORGOTTEN) {
+                ForgottenScreen(
+                    messagesDeleted = forgotInUse,
+                    onBluetoothSettings = { openSettingsPage(Settings.ACTION_BLUETOOTH_SETTINGS, withPackage = false) },
+                    onDone = {
+                        // The radio in use was forgotten (its removal may still be waiting for Live to stop).
+                        if (forgotInUse || Radios.state.value?.chosen == null) {
+                            nav.navigate(WELCOME) { popUpTo(nav.graph.id) { inclusive = true } }
+                        } else {
+                            nav.popBackStack()
+                        }
+                    },
+                )
+            }
+
+            composable(SETTINGS) {
+                SettingsScreen(
+                    state = SettingsState(
+                        checkInOn = checkInOn,
+                        intervalMinutes = intervalMinutes,
+                        alarmsAllowed = exactAlarmsAllowed,
+                        liveRunning = link.running,
+                        hasRadio = radios?.chosen != null,
+                        syncing = sync.syncing,
+                    ),
+                    onCheckIn = { toggleCheckIn() },
+                    onInterval = { intervalMinutes = CheckIn.nextInterval(this@MainActivity) },
+                    onAllowAlarms = { openSettingsPage(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, withPackage = true) },
+                    onLive = { toggleLive() },
+                    onReadEverything = {
+                        withPermissions { CheckIn.now(this@MainActivity, full = true) }
+                        goHome()
+                    },
+                    onDiagnostics = { nav.navigate(DIAGNOSTICS) },
+                )
+            }
+
+            composable(DIAGNOSTICS) {
+                val counts by Storage.counts.collectAsStateWithLifecycle()
+                val lines by SpikeLog.lines.collectAsStateWithLifecycle()
+                DiagnosticsScreen(link = link, counts = counts, lines = lines, onClearLog = { SpikeLog.clear() })
             }
         }
     }
 
+    /** The current time, moved on every 30 s so "4 min" ages while a screen is open. */
     @Composable
-    private fun WideChip(
-        label: String,
-        detail: String? = null,
-        secondary: Boolean = false,
-        enabled: Boolean = true,
-        onClick: () -> Unit,
-    ) {
-        Chip(
-            onClick = onClick,
-            label = { Text(label) },
-            secondaryLabel = if (detail != null) {
-                { Text(detail) }
-            } else {
-                null
-            },
-            colors = if (secondary) ChipDefaults.secondaryChipColors() else ChipDefaults.primaryChipColors(),
-            enabled = enabled,
-            modifier = Modifier.fillMaxWidth(),
-        )
+    private fun rememberNow(): Long {
+        var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+        LaunchedEffect(Unit) {
+            while (true) {
+                delay(NOW_TICK_MS)
+                now = System.currentTimeMillis()
+            }
+        }
+        return now
     }
 
     private companion object {
-        const val SHOWN_LOG_LINES = 80
+        const val WELCOME = "welcome"
+        const val HOME = "home"
+        const val CONVERSATION = "conversation"
+        const val RADIOS = "radios"
+        const val RADIO = "radio"
+        const val FIND = "find"
+        const val CONFIRM_USE = "confirm-use"
+        const val CONFIRM_FORGET = "confirm-forget"
+        const val FORGOTTEN = "forgotten"
+        const val SETTINGS = "settings"
+        const val DIAGNOSTICS = "diagnostics"
+
+        /** No sync on opening the app if the last one finished this recently. */
+        const val OPEN_SYNC_GAP_MS = 2 * 60_000L
+        const val NOW_TICK_MS = 30_000L
+        const val LIVE_STOP_WAIT_MS = 10_000L
     }
 }

@@ -62,3 +62,14 @@ data class MessageRow(
     /** For the screens and notifications (M2 steps 3 and 4). */
     val read: Boolean = false,
 )
+
+/** A conversation's newest message and how many of its messages are unread, for Home. */
+data class ConversationLast(
+    val conversation: String,
+    val sender: String,
+    val body: String,
+    val receivedAt: Long,
+    val unread: Int,
+    /** For a direct message, the stored contact whose key starts with the sender's prefix. */
+    val contactName: String?,
+)

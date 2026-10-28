@@ -57,7 +57,7 @@ class CheckInService : Service() {
         if (running?.isActive == true) return START_NOT_STICKY
         running = scope.launch {
             try {
-                CheckInRun.run(applicationContext, why, fullRead = why == CheckIn.ASKED_FOR)
+                CheckInRun.run(applicationContext, why, fullRead = why == CheckIn.FULL_READ_ASKED_FOR)
             } finally {
                 ServiceCompat.stopForeground(this@CheckInService, ServiceCompat.STOP_FOREGROUND_REMOVE)
                 stopSelf()
