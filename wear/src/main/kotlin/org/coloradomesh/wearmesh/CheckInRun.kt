@@ -128,6 +128,10 @@ object CheckInRun {
         timeLimitMs: Long,
     ): String? {
         val store = Storage.store(app, address)
+        // The first sync after choosing a radio brings its backlog, which does not notify (decided
+        // for step 4); once that sync has collected the queue, later messages do.
+        val prefs = Prefs.of(app)
+        val backlog = prefs.getString(Prefs.QUIET_SYNC_RADIO, null) == address
         val plan = try {
             withContext(Dispatchers.IO) {
                 Storage.call {
@@ -197,6 +201,12 @@ object CheckInRun {
             // Hand the store any contacts still gathered. Anything the radio sends after this, if
             // the link was slow to close, is logged and not stored.
             recorder.finish()
+            // Queued behind every write still pending, so the list holds every message stored,
+            // even when the check-in was stopped part-way or the store is slow.
+            Storage.later {
+                val toNotify = synchronized(newlyStored) { newlyStored.toList() }
+                Notifier.afterSync(app, address, toNotify, backlog)
+            }
         }
 
         // The link is closed, so no more writes are coming: wait for the store to take them.
@@ -204,13 +214,7 @@ object CheckInRun {
         if (!stored) SpikeLog.log("Check-in: the store did not catch up within ${STORE_WAIT_MS / 1000} s")
         Storage.refreshCounts(app)
 
-        // The first sync after choosing a radio brings its backlog, which does not notify (decided
-        // for step 4); once that sync has collected the queue, later messages do.
-        val prefs = Prefs.of(app)
-        val backlog = prefs.getString(Prefs.QUIET_SYNC_RADIO, null) == address
         if (backlog && result == Outcome.Drained) prefs.edit().remove(Prefs.QUIET_SYNC_RADIO).apply()
-        val toNotify = synchronized(newlyStored) { newlyStored.toList() }
-        Storage.later { Notifier.afterSync(app, address, toNotify, backlog) }
 
         val total = (SystemClock.elapsedRealtime() - started) / 1000.0
         val battery = watchBattery(app)

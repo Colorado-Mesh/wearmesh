@@ -78,13 +78,12 @@ Only the connection service touches BLE; everything above it works on parsed mes
 
 ## Connection strategy and power
 
-The app offers two connection modes, and the user picks per session: Live for instant alerts, Check-in for battery life.
+The app has two connection modes, one setting in Settings › Mode that stays until changed: Live for instant alerts, Check-in for battery life. A new install starts in Live and is offered Check-in once (M2 step 4, [M2-step4-notifications.md](M2-step4-notifications.md)). A third, Manual mode (connect only with the app on screen) was in the first plan and was dropped: opening the app syncs in either mode.
 
 | Mode | How it works | Alerts | Battery cost | Use when |
 | --- | --- | --- | --- | --- |
-| Live | Foreground service (connectedDevice) holds the BLE link; PUSH_CODE_MSG_WAITING triggers sync | Seconds | Highest; link always up | Active ops, events, nets |
-| Check-in | Connect on a timer or when the app opens, drain the queue, disconnect | Up to one interval late | Low; radio mostly idle | All-day carry |
-| Manual | Connect only while the app is on screen | None in background | Lowest | Occasional reading |
+| Live | Foreground service (connectedDevice) holds the BLE link; PUSH_CODE_MSG_WAITING triggers sync | Seconds | Highest; link always up (about 2.3% an hour) | Active ops, events, nets |
+| Check-in | Connect on a timer or when the app opens, drain the queue, disconnect | Up to one interval late | Low; radio mostly idle (about 1% an hour overnight) | All-day carry |
 
 The Check-in interval is user-set: 15 minutes by default, 30 or 60 as options. Check-in runs on exact allow-while-idle alarms, each starting a short-lived foreground service with a wake lock for one sync. A WorkManager job was tried first and Doze held it back for 6 hours overnight ([M2-step1-check-in.md](M2-step1-check-in.md)). Exact alarms need the user to allow "Alarms & reminders" once.
 
@@ -94,7 +93,7 @@ Connection lifecycle:
 2. Connect: GATT connect, request a larger MTU, subscribe to TX, send CMD_DEVICE_QUERY and APP_START, set device time from the watch clock.
 3. Refresh channels: CMD_GET_CHANNEL for each slot; cache names locally.
 4. Drain: CMD_SYNC_NEXT_MESSAGE until the queue is empty.
-5. Idle (Live) or disconnect (Check-in, Manual).
+5. Idle (Live) or disconnect (Check-in).
 6. On link loss: exponential backoff reconnect in Live; give up until next interval otherwise.
 
 One request is in flight at a time with a timeout, as the protocol doc recommends; responses are matched to the request queue in order.

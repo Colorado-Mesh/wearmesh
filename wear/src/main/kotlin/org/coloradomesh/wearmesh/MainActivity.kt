@@ -20,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
@@ -71,6 +72,9 @@ class MainActivity : ComponentActivity() {
     /** A conversation to open, from a tapped notification: radio, conversation, title. */
     private var toOpen by mutableStateOf<Triple<String, String, String>?>(null)
 
+    /** Whether this activity has already taken a notification's conversation from its intent. */
+    private var openedFromNotification = false
+
     /** Whether the last radio forgotten was the one in use, which leaves the watch on Welcome. */
     private var forgotInUse by mutableStateOf(false)
 
@@ -98,10 +102,16 @@ class MainActivity : ComponentActivity() {
         SyncStatus.load(this)
         Notifier.createChannels(this)
         Notifier.loadChoices(this, Radios.state.value?.chosen?.address)
-        // Only a fresh start from a notification; not a recreation, nor a relaunch from Recents.
-        if (savedInstanceState == null) openFrom(intent)
+        // A notification's conversation opens once: not again when the activity is recreated
+        // after opening it, nor when it is relaunched from Recents.
+        if (savedInstanceState?.getBoolean(OPENED_FROM_NOTIFICATION) != true) openFrom(intent)
         val start = if (Radios.state.value?.chosen != null) HOME else WELCOME
         setContent { MaterialTheme { App(start) } }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(OPENED_FROM_NOTIFICATION, openedFromNotification)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -116,6 +126,10 @@ class MainActivity : ComponentActivity() {
         val radio = intent.getStringExtra(Notifier.EXTRA_RADIO) ?: return
         val conversation = intent.getStringExtra(Notifier.EXTRA_CONVERSATION) ?: return
         toOpen = Triple(radio, conversation, intent.getStringExtra(Notifier.EXTRA_TITLE) ?: conversation)
+        openedFromNotification = true
+        intent.removeExtra(Notifier.EXTRA_RADIO)
+        intent.removeExtra(Notifier.EXTRA_CONVERSATION)
+        intent.removeExtra(Notifier.EXTRA_TITLE)
     }
 
     override fun onStart() {
@@ -148,13 +162,16 @@ class MainActivity : ComponentActivity() {
         if (SpikeState.state.value.running || !hasBluetoothPermission()) return
         if (Mode.get(this) == Mode.Kind.LIVE) {
             // A check-in still holding the radio would make Live's first connection fail.
-            afterSyncEnds {
-                try {
-                    if (!SpikeState.state.value.running) SpikeService.connect(this, radio.address)
-                } catch (e: IllegalStateException) {
-                    SpikeLog.log("Live (app opened): could not start (${e.message})")
-                }
-            }
+            afterSyncEnds(
+                action = {
+                    try {
+                        if (onScreen() && !SpikeState.state.value.running) SpikeService.connect(this, radio.address)
+                    } catch (e: IllegalStateException) {
+                        SpikeLog.log("Live (app opened): could not start (${e.message})")
+                    }
+                },
+                onTimeout = { SpikeLog.log("Live (app opened): a check-in is still running; Live starts when the app is next opened") },
+            )
             return
         }
         val status = SyncStatus.state.value
@@ -241,23 +258,43 @@ class MainActivity : ComponentActivity() {
 
     private fun switchMode(kind: Mode.Kind) = withPermissions {
         mode = kind
-        // Live waits for a check-in under way to let go of the radio.
+        // Live waits for a check-in under way to let go of the radio. By then the user may have
+        // chosen again, or left the app: the latest choice wins, and Live's link is only started
+        // with the app on screen (otherwise it starts when the app is next opened).
         val apply = {
-            Mode.set(this, kind)
-            exactAlarmsAllowed = CheckIn.exactAlarmsAllowed(this)
+            if (mode == kind) {
+                Mode.set(this, kind, startLive = onScreen())
+                exactAlarmsAllowed = CheckIn.exactAlarmsAllowed(this)
+            }
         }
-        if (kind == Mode.Kind.LIVE) afterSyncEnds(apply) else apply()
+        if (kind == Mode.Kind.LIVE) {
+            afterSyncEnds(
+                action = apply,
+                onTimeout = {
+                    // Never two links to one radio: record Live, start it at the next opening.
+                    if (mode == kind) Mode.set(this, kind, startLive = false)
+                    SpikeLog.log("Mode: Live; a check-in is still running, so the link starts when the app is next opened")
+                },
+            )
+        } else {
+            apply()
+        }
     }
 
-    /** Runs [action] now, or once the check-in under way ends, up to [SYNC_END_WAIT_MS]. */
-    private fun afterSyncEnds(action: () -> Unit) {
+    private fun onScreen(): Boolean = lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+
+    /**
+     * Runs [action] now, or once the check-in under way ends. If it has not ended within
+     * [SYNC_END_WAIT_MS], runs [onTimeout] instead, so the two never hold the radio at once.
+     */
+    private fun afterSyncEnds(action: () -> Unit, onTimeout: () -> Unit) {
         if (!SyncStatus.state.value.syncing) {
             action()
             return
         }
         lifecycleScope.launch {
-            withTimeoutOrNull(SYNC_END_WAIT_MS) { SyncStatus.state.first { !it.syncing } }
-            action()
+            val ended = withTimeoutOrNull(SYNC_END_WAIT_MS) { SyncStatus.state.first { !it.syncing } }
+            if (ended != null) action() else onTimeout()
         }
     }
 
@@ -521,5 +558,6 @@ class MainActivity : ComponentActivity() {
 
         /** Longer than a check-in's own limit, so Live never starts while one holds the radio. */
         const val SYNC_END_WAIT_MS = 120_000L
+        const val OPENED_FROM_NOTIFICATION = "opened_from_notification"
     }
 }

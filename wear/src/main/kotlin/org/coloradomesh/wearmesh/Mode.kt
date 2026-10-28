@@ -14,15 +14,22 @@ object Mode {
     fun get(context: Context): Kind = if (CheckIn.isOn(context)) Kind.CHECK_IN else Kind.LIVE
 
     /**
-     * Switches to [kind]. Live starts a foreground service, so call it with the app on screen and
-     * Bluetooth permission granted.
+     * Switches to [kind]. Live starts a foreground service, which Android allows only with the app
+     * on screen, so [startLive] false only records Live; the app starts the link next time it is
+     * opened.
      */
-    fun set(context: Context, kind: Kind) {
+    fun set(context: Context, kind: Kind, startLive: Boolean = true) {
         when (kind) {
             Kind.LIVE -> {
                 CheckIn.setOn(context, false)
                 val radio = Prefs.of(context).getString(Prefs.RADIO_ADDRESS, null)
-                if (radio != null && !SpikeState.state.value.running) SpikeService.connect(context, radio)
+                if (startLive && radio != null && !SpikeState.state.value.running) {
+                    try {
+                        SpikeService.connect(context, radio)
+                    } catch (e: IllegalStateException) {
+                        SpikeLog.log("Live: could not start (${e.message}); it starts when the app is next opened")
+                    }
+                }
             }
             Kind.CHECK_IN -> {
                 if (SpikeState.state.value.running) SpikeService.stop(context)
