@@ -83,6 +83,16 @@ reviews:
         a time; flag any that run on the main thread or inside a protocol listener call. A
         change to an entity needs a schema version bump.
 
+    - path: "wear/src/main/kotlin/org/coloradomesh/wearmesh/ui/**"
+      instructions: |
+        The screens, Compose for Wear OS. Decided for M2 step 3: Home lists direct messages
+        first (newest first), then every programmed channel in slot order; Check now is a brief
+        read; times shown are when the watch received a message, not the sender's clock. Check
+        that lists suit a small round screen (ScalingLazyColumn, short single-line labels,
+        swipe to go back), that nothing on screen blocks on storage (reads are Room Flows,
+        writes go through Storage), and that pure logic (HomeRows, TimeAgo, Mentions) keeps
+        its JVM tests in step with changes.
+
     - path: "docs/icon/make_icon.py"
       instructions: |
         Writes the app's icon drawables, launcher icons, docs/icon/icon.svg and the PNGs. If

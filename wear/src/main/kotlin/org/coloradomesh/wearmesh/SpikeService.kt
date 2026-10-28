@@ -200,6 +200,7 @@ class SpikeService : Service() {
                     .format(info.frequencyMhz, info.bandwidthKhz, info.spreadingFactor, info.codingRate, info.txPowerDbm),
             )
             SpikeState.update { it.copy(radioName = info.name) }
+            Prefs.of(this@SpikeService).edit().putString(Prefs.SELF_NAME, info.name).apply()
         }
 
         override fun onDevice(info: DeviceInfo) {

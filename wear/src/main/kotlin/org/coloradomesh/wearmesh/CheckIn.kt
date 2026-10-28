@@ -19,8 +19,9 @@ import android.os.SystemClock
  * installs: the user turns it on once. Without it nothing is scheduled, and the log says why.
  */
 object CheckIn {
-    const val INTERVAL_MINUTES = 15L
-    private const val INTERVAL_MS = INTERVAL_MINUTES * 60_000L
+    /** Minutes between check-ins: 15 by default, 30 or 60 in Settings (decided for M2). */
+    val INTERVAL_CHOICES = listOf(15, 30, 60)
+    private const val DEFAULT_MINUTES = 15
 
     /** The first check-in after turning it on, soon enough to see it work. */
     private const val FIRST_DELAY_MS = 60_000L
@@ -28,12 +29,25 @@ object CheckIn {
 
     fun isOn(context: Context): Boolean = Prefs.of(context).getBoolean(Prefs.CHECK_IN, false)
 
+    fun intervalMinutes(context: Context): Int =
+        Prefs.of(context).getInt(Prefs.CHECK_IN_MINUTES, DEFAULT_MINUTES).takeIf { it in INTERVAL_CHOICES } ?: DEFAULT_MINUTES
+
+    /** Moves to the next interval choice and sets the next alarm by it; returns the new interval. */
+    fun nextInterval(context: Context): Int {
+        val choices = INTERVAL_CHOICES
+        val next = choices.getOrElse(choices.indexOf(intervalMinutes(context)) + 1) { choices.first() }
+        Prefs.of(context).edit().putInt(Prefs.CHECK_IN_MINUTES, next).apply()
+        SpikeLog.log("Check-in: every $next min")
+        scheduleNext(context, next * 60_000L)
+        return next
+    }
+
     fun exactAlarmsAllowed(context: Context): Boolean = alarms(context).canScheduleExactAlarms()
 
     fun setOn(context: Context, on: Boolean) {
         Prefs.of(context).edit().putBoolean(Prefs.CHECK_IN, on).apply()
         if (on) {
-            SpikeLog.log("Check-in: turned on, every $INTERVAL_MINUTES min")
+            SpikeLog.log("Check-in: turned on, every ${intervalMinutes(context)} min")
             scheduleNext(context, FIRST_DELAY_MS)
         } else {
             alarms(context).cancel(alarmIntent(context))
@@ -46,25 +60,35 @@ object CheckIn {
      * app update (which clear alarms), and when the permission is granted. Does nothing while
      * Check-in is off.
      */
-    fun scheduleNext(context: Context, delayMs: Long = INTERVAL_MS) {
+    fun scheduleNext(context: Context, delayMs: Long? = null) {
         if (!isOn(context)) return
+        val delay = delayMs ?: (intervalMinutes(context) * 60_000L)
         if (!exactAlarmsAllowed(context)) {
             SpikeLog.log("Check-in: not scheduled, \"Alarms & reminders\" is not allowed for WearMesh")
             return
         }
         alarms(context).setExactAndAllowWhileIdle(
             AlarmManager.ELAPSED_REALTIME_WAKEUP,
-            SystemClock.elapsedRealtime() + delayMs,
+            SystemClock.elapsedRealtime() + delay,
             alarmIntent(context),
         )
-        SpikeLog.log("Check-in: next at ${SpikeLog.clock(System.currentTimeMillis() + delayMs)}")
+        SpikeLog.log("Check-in: next at ${SpikeLog.clock(System.currentTimeMillis() + delay)}")
     }
 
-    /** Why a check-in asked for on screen runs; such a check-in reads everything. */
+    /** Why a check-in runs when Check now is tapped: a brief read, like a scheduled one. */
     const val ASKED_FOR = "asked for"
 
-    /** One check-in now, while the app is on screen. */
-    fun now(context: Context) = CheckInService.start(context, ASKED_FOR)
+    /** Why one runs from Settings' "Read channels and contacts again": a full read. */
+    const val FULL_READ_ASKED_FOR = "full read asked for"
+
+    /** Why one runs when the app comes on screen (decided for M2: opening the app syncs). */
+    const val APP_OPENED = "app opened"
+
+    /** One check-in now, while the app is on screen; [full] reads every channel slot and contact too. */
+    fun now(context: Context, full: Boolean = false) = CheckInService.start(context, if (full) FULL_READ_ASKED_FOR else ASKED_FOR)
+
+    /** The sync when the app is opened. */
+    fun onOpen(context: Context) = CheckInService.start(context, APP_OPENED)
 
     private fun alarms(context: Context) = context.getSystemService(AlarmManager::class.java)
 

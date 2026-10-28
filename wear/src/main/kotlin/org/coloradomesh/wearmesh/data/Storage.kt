@@ -1,6 +1,7 @@
 package org.coloradomesh.wearmesh.data
 
 import android.content.Context
+import org.coloradomesh.wearmesh.SpikeLog
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.util.concurrent.Callable
@@ -27,6 +28,18 @@ object Storage {
 
     fun store(context: Context): MessageStore = instance ?: synchronized(this) {
         instance ?: RoomMessageStore(WearMeshDatabase.get(context)).also { instance = it }
+    }
+
+    /** For the screens' Flow queries; writes still go through [writer]. */
+    fun dao(context: Context): StoreDao = WearMeshDatabase.get(context).dao()
+
+    /** Queues [block] on the storage thread without waiting; a failure is logged, not thrown. */
+    fun later(block: () -> Unit) = writer.execute {
+        try {
+            block()
+        } catch (e: Exception) {
+            SpikeLog.log("Storage failed: ${e::class.simpleName}: ${e.message}")
+        }
     }
 
     /**
