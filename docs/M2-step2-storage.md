@@ -75,6 +75,26 @@ done
 sqlite3 wearmesh.db "SELECT conversation, sender, body FROM messages ORDER BY id DESC LIMIT 20;"
 ```
 
+## Result: 24 hours worn (27 to 28 October 2026)
+
+From 08:41 to 08:44 the next day, on the wrist through the day and on the table overnight, with no charging. Every check-in ran; brief reads were about 3 times faster than night 2's check-ins.
+
+| Question | Result |
+| --- | --- |
+| Check-ins | 97 of 97 scheduled, 14.3 to 15.8 minutes apart; 93 in Doze |
+| Brief reads | 94; median 2.8 s, longest 8.3 s. With nothing new: median 2.3 s, against about 8.5 s in night 2 |
+| Full reads | Check now at 08:36 and 08:38, then the first scheduled one 24 hours later at 08:44 (9.9 s) |
+| Messages stored | 443, with 0 duplicates and no storage errors |
+| Unanswered channel slots | None |
+| Failures | 2, at 17:28 and 18:28 (below); the next check-in worked each time |
+| Watch battery | 80% to 41% in 24 hours, about 1.6% an hour overall: 2.2% an hour in the day while worn and used, 1.0% an hour on the quiet night (23:13 to 05:29), the same as night 2 |
+
+Night-time drain did not fall with check-ins about 6 s shorter, so the check-ins are a small part of it; the watch's own idle drain is most of it. A worn day still leaves the watch at about 40% after 24 hours.
+
+No message came twice this time. Night 2's doubles may have been the same text sent twice with different times, which the store keeps as two messages by design.
+
+**The two failures** were alike: the link connected and found the service, the radio did not answer the packet size request for 4 s, and then the link dropped with status 147 (Android's connection timeout). A drop at that stage ends the check-in, since only a failure before connecting is tried again. Treating a drop during set-up as one more connection try would likely have saved both. That they came exactly an hour apart, at :28, may be chance or the radio being busy with something on the hour; the next long run will show.
+
 ## Schema file
 
 Room writes the database schema to `wear/schemas/` during the build. Commit `wear/schemas/org.coloradomesh.wearmesh.data.WearMeshDatabase/1.json` after the first build, so later versions can be checked against it. Until the first release, a schema change starts the store afresh instead of migrating it.
