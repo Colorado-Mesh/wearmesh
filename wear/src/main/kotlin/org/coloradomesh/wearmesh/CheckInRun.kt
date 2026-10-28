@@ -110,14 +110,20 @@ object CheckInRun {
         SyncStatus.started()
         var problem: String? = "stopped before it finished"
         try {
-            problem = connectAndCollect(app, address, fullRead, started)
+            problem = connectAndCollect(app, address, fullRead, started, timeLimitMs)
         } finally {
             SyncStatus.finished(app, problem)
         }
     }
 
     /** Returns why the check-in failed, or null when it collected the radio's queue. */
-    private suspend fun connectAndCollect(app: Context, address: String, fullRead: Boolean, started: Long): String? {
+    private suspend fun connectAndCollect(
+        app: Context,
+        address: String,
+        fullRead: Boolean,
+        started: Long,
+        timeLimitMs: Long,
+    ): String? {
         val store = Storage.store(app)
         val plan = try {
             withContext(Dispatchers.IO) {
