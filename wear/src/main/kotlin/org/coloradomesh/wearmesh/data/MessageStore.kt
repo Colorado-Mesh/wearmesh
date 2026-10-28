@@ -34,23 +34,26 @@ data class IncomingMessage(
 data class StoreCounts(val messages: Int, val conversations: Int, val contacts: Int, val channels: Int)
 
 /**
- * Messages, channels and contacts from one radio, kept on the watch.
- *
- * One history: switching to a different radio clears everything first, and forgetting the radio
- * deletes its messages too (decided for M2). Each conversation keeps its newest
- * [KEEP_PER_CONVERSATION] messages. A message already stored (same conversation, sender, sent
- * time and text) is not stored again.
+ * Messages, channels and contacts from one radio, kept on the watch: a view of the store for the
+ * radio [address]. Each radio the watch has used keeps its own history, so switching back to a
+ * radio shows what was stored from it before (decided 28 October). Forgetting a radio deletes
+ * its history. Each conversation keeps its newest [KEEP_PER_CONVERSATION] messages. A message
+ * already stored (same conversation, sender, sent time and text) is not stored again.
  *
  * Calls block on storage, so they are made off the main thread, one at a time (see [Storage]).
  */
 interface MessageStore {
+    /** The radio this view is for. */
+    val address: String
+
+    /** This radio's sync state, or null before [open] first runs for it. */
     fun radio(): StoredRadio?
 
-    /** Makes [address] the store's radio. If it holds another radio's data, that is cleared first. */
-    fun useRadio(address: String)
+    /** Starts keeping data for this radio, if the store has none yet; what it has is kept. */
+    fun open()
 
-    /** Deletes everything, if [address] is the store's radio. Returns whether it was. */
-    fun forget(address: String): Boolean
+    /** Deletes everything stored from this radio. */
+    fun forget()
 
     /** Adds or updates these contacts, marking them seen at [readAt]. */
     fun saveContacts(contacts: List<Contact>, readAt: Long)

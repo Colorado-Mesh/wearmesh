@@ -17,9 +17,10 @@ class SyncRecorderTest {
         val messages = ArrayList<IncomingMessage>()
         var failNext = false
 
+        override val address = "F3:9E:35:24:99:76"
         override fun radio(): StoredRadio? = null
-        override fun useRadio(address: String) { calls.add("useRadio $address") }
-        override fun forget(address: String) = false
+        override fun open() { calls.add("open") }
+        override fun forget() { calls.add("forget") }
         override fun saveContacts(contacts: List<Contact>, readAt: Long) {
             calls.add("saveContacts ${contacts.map { it.name }} at $readAt")
         }

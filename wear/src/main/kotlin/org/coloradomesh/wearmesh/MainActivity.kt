@@ -61,7 +61,7 @@ class MainActivity : ComponentActivity() {
     private var intervalMinutes by mutableStateOf(15)
     private var exactAlarmsAllowed by mutableStateOf(true)
 
-    /** Whether the last radio forgotten was the one in use, so its messages were deleted. */
+    /** Whether the last radio forgotten was the one in use, which leaves the watch on Welcome. */
     private var forgotInUse by mutableStateOf(false)
 
     /** What to do once permissions are granted. */
@@ -226,13 +226,15 @@ class MainActivity : ComponentActivity() {
         val dao = remember { Storage.dao(this) }
         val now = rememberNow()
         val goHome = { nav.navigate(HOME) { popUpTo(nav.graph.id) { inclusive = true } } }
+        // Every stored query is for the radio in use; another radio's history waits until it is chosen again.
+        val radioInUse = radios?.chosen?.address.orEmpty()
 
         SwipeDismissableNavHost(navController = nav, startDestination = start) {
             composable(WELCOME) { WelcomeScreen(onFind = { nav.navigate(FIND) }) }
 
             composable(HOME) {
-                val channels by remember { dao.channelsFlow() }.collectAsStateWithLifecycle(emptyList())
-                val lasts by remember { dao.lastMessagesFlow() }.collectAsStateWithLifecycle(emptyList<ConversationLast>())
+                val channels by remember(radioInUse) { dao.channelsFlow(radioInUse) }.collectAsStateWithLifecycle(emptyList())
+                val lasts by remember(radioInUse) { dao.lastMessagesFlow(radioInUse) }.collectAsStateWithLifecycle(emptyList<ConversationLast>())
                 HomeScreen(
                     radioName = radios?.chosen?.name,
                     status = HomeRows.status(
@@ -255,13 +257,13 @@ class MainActivity : ComponentActivity() {
             composable("$CONVERSATION/{key}/{title}") { entry ->
                 val key = entry.arguments?.getString("key").orEmpty()
                 val title = entry.arguments?.getString("title").orEmpty()
-                val messages by remember(key) { dao.messagesFlow(key) }.collectAsStateWithLifecycle(emptyList())
+                val messages by remember(radioInUse, key) { dao.messagesFlow(radioInUse, key) }.collectAsStateWithLifecycle(emptyList())
                 ConversationScreen(
                     title = title,
                     messages = messages,
                     selfName = remember { Prefs.of(this@MainActivity).getString(Prefs.SELF_NAME, null) },
                     now = now,
-                    onSeen = { Storage.later { dao.markRead(key) } },
+                    onSeen = { Storage.later { dao.markRead(radioInUse, key) } },
                 )
             }
 
@@ -283,14 +285,10 @@ class MainActivity : ComponentActivity() {
                     RadioScreen(
                         radio = radio,
                         inUse = radios?.chosen?.address == address,
+                        // Each radio keeps its own history, so switching needs no warning.
                         onUse = {
-                            // With no radio in use there are no messages to lose, so no need to ask.
-                            if (radios?.chosen == null) {
-                                use(radio)
-                                goHome()
-                            } else {
-                                nav.navigate("$CONFIRM_USE/${Uri.encode(address)}")
-                            }
+                            use(radio)
+                            goHome()
                         },
                         onForget = { nav.navigate("$CONFIRM_FORGET/${Uri.encode(address)}") },
                     )
@@ -305,36 +303,9 @@ class MainActivity : ComponentActivity() {
                     notice = notice,
                     onScan = { scan() },
                     onPick = { picked ->
-                        val radio = KnownRadio(picked.address, picked.name)
-                        val current = radios?.chosen
-                        when {
-                            // Nothing stored yet to lose, or the same radio again.
-                            current == null || current.address == radio.address -> {
-                                use(radio)
-                                goHome()
-                            }
-                            else -> {
-                                Radios.remember(this@MainActivity, radio)
-                                nav.navigate("$CONFIRM_USE/${Uri.encode(radio.address)}")
-                            }
-                        }
-                    },
-                )
-            }
-
-            composable("$CONFIRM_USE/{address}") { entry ->
-                val address = entry.arguments?.getString("address").orEmpty()
-                val radio = radios?.known?.firstOrNull { it.address == address }
-                ConfirmScreen(
-                    title = "Use ${radio?.name ?: address}?",
-                    explanation = "The watch keeps one radio's messages. Switching deletes the ones stored now; " +
-                        "the new radio's waiting messages come in at the next sync.",
-                    action = "Use this radio",
-                    onConfirm = {
-                        if (radio != null) use(radio)
+                        use(KnownRadio(picked.address, picked.name))
                         goHome()
                     },
-                    onCancel = { nav.popBackStack() },
                 )
             }
 
@@ -344,7 +315,11 @@ class MainActivity : ComponentActivity() {
                 val inUse = radios?.chosen?.address == address
                 ConfirmScreen(
                     title = "Forget ${radio?.name ?: address}?",
-                    explanation = if (inUse) "Its stored messages are deleted, and the watch stops syncing with it." else "It is removed from the list.",
+                    explanation = if (inUse) {
+                        "Its stored messages are deleted, and the watch stops syncing with it."
+                    } else {
+                        "Its stored messages are deleted, and it is removed from the list."
+                    },
                     action = "Forget",
                     onConfirm = {
                         forget(address)
@@ -356,7 +331,6 @@ class MainActivity : ComponentActivity() {
 
             composable(FORGOTTEN) {
                 ForgottenScreen(
-                    messagesDeleted = forgotInUse,
                     onBluetoothSettings = { openSettingsPage(Settings.ACTION_BLUETOOTH_SETTINGS, withPackage = false) },
                     onDone = {
                         // The radio in use was forgotten (its removal may still be waiting for Live to stop).
@@ -419,7 +393,6 @@ class MainActivity : ComponentActivity() {
         const val RADIOS = "radios"
         const val RADIO = "radio"
         const val FIND = "find"
-        const val CONFIRM_USE = "confirm-use"
         const val CONFIRM_FORGET = "confirm-forget"
         const val FORGOTTEN = "forgotten"
         const val SETTINGS = "settings"

@@ -15,7 +15,7 @@ A Room database on the watch (`wearmesh.db`), holding data from one radio:
 
 Decided for M2:
 
-- **One history.** Syncing with a different radio clears everything first; the new radio's queue and a full read fill it again.
+- **One history.** Syncing with a different radio clears everything first; the new radio's queue and a full read fill it again. *Changed 28 October: each radio now keeps its own history (database version 2; see [step 3](M2-step3-screens.md)).*
 - **Forget deletes messages.** The store can forget a radio already; the button comes with the radios screen in step 3.
 - **100 messages per conversation**, the most recently received. Sender clocks can be wrong, so "newest" means last stored, not latest sent time.
 - **Sender and text split** from MeshCore's `Name: text` form. A prefix longer than a node name (31 bytes), or one with a line break, is kept as part of the text.

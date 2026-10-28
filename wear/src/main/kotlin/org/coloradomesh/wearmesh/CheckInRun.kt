@@ -124,12 +124,11 @@ object CheckInRun {
         started: Long,
         timeLimitMs: Long,
     ): String? {
-        val store = Storage.store(app)
+        val store = Storage.store(app, address)
         val plan = try {
             withContext(Dispatchers.IO) {
                 Storage.call {
-                    // A different radio from the one the store holds clears the store first.
-                    store.useRadio(address)
+                    store.open()
                     SyncPlan.decide(store.radio(), address, System.currentTimeMillis(), fullRead)
                 }
             }
