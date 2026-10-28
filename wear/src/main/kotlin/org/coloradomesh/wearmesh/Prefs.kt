@@ -25,6 +25,18 @@ object Prefs {
     /** When the last sync with the radio finished, by the watch's clock. */
     const val LAST_SYNC_AT = "last_sync_at"
 
+    /**
+     * A radio whose next sync brings a backlog that should not notify: set when a radio is chosen,
+     * cleared once its first sync after that has collected its queue.
+     */
+    const val QUIET_SYNC_RADIO = "quiet_sync_radio"
+
+    /** Whether the first-run offer to move from Live to Check-in has been answered. */
+    const val MODE_PROMPT_DONE = "mode_prompt_done"
+
+    /** Notification choices for one radio's conversations; the key is this plus the radio's address. */
+    const val NOTIFY_CHOICES = "notify_choices_"
+
     fun of(context: Context): SharedPreferences =
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 }

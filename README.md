@@ -8,16 +8,16 @@ It is a [Colorado Mesh](https://coloradomesh.org/) project. Its protocol and Blu
 
 ## Status
 
-**M2 step 3: screens.** A read-only MeshCore client on the watch. M0 (the Bluetooth spike) and M1 (the shared meshcore-kotlin code) are done; M2 has shown a background Check-in reaching the radio every 15 minutes all day and stored what it sends. The `wear` app now has its own screens: conversations with unread counts, a conversation view, radios, settings and diagnostics. It reads from the radio only and sends nothing on the mesh; replies are M3.
+**M2 step 4: notifications and modes.** A read-only MeshCore client on the watch. M0 (the Bluetooth spike) and M1 (the shared meshcore-kotlin code) are done; M2 has shown a background Check-in reaching the radio every 15 minutes all day and stored what it sends. The `wear` app has its own screens (conversations with unread counts, a conversation view, radios, settings and diagnostics), notifies for direct messages, private channels and mentions, and runs in Live or Check-in mode. It reads from the radio only and sends nothing on the mesh; replies are M3.
 
-How to run the tests and what to record: [docs/M0-spike.md](docs/M0-spike.md) for the Live link, [docs/M2-step1-check-in.md](docs/M2-step1-check-in.md) for Check-in, [docs/M2-step2-storage.md](docs/M2-step2-storage.md) for storage, [docs/M2-step3-screens.md](docs/M2-step3-screens.md) for the screens. The M2 plan is in [docs/design.md](docs/design.md).
+How to run the tests and what to record: [docs/M0-spike.md](docs/M0-spike.md) for the Live link, [docs/M2-step1-check-in.md](docs/M2-step1-check-in.md) for Check-in, [docs/M2-step2-storage.md](docs/M2-step2-storage.md) for storage, [docs/M2-step3-screens.md](docs/M2-step3-screens.md) for the screens, [docs/M2-step4-notifications.md](docs/M2-step4-notifications.md) for notifications and modes. The M2 plan is in [docs/design.md](docs/design.md).
 
 ## Layout
 
 | Folder | What it holds |
 | --- | --- |
 | `meshcore-kotlin/` | A git submodule: the companion protocol in pure Kotlin, with its tests, and the Bluetooth link, shared with MeshCore TAK Bridge |
-| `wear/` | The Wear OS app: Live and Check-in, in `data/` the message store and the sync step shared by both, and in `ui/` the screens |
+| `wear/` | The Wear OS app: Live and Check-in, in `data/` the message store and the sync step shared by both, in `ui/` the screens, and in `notify/` the notifications |
 | `wear/schemas/` | The database schema of each version, written by Room during the build |
 | `docs/` | The design proposal and the test procedures; `docs/icon/` has the icon and the script that draws it (`python3 docs/icon/make_icon.py` after changing it), plus `social-preview.png` for GitHub |
 

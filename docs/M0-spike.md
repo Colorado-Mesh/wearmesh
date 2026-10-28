@@ -8,6 +8,8 @@ M0 answers the Bluetooth questions on a real watch before any messaging UI is bu
 
 The spike reads from the radio only. It never sends on the mesh and never changes the radio's settings, channels, contacts or clock.
 
+M0 is done. The spike screen this procedure was written for has since been replaced by the app's screens (M2 step 3), and the dictation test was removed until M3. To repeat the Live link test now: add the radio under **Radios › Add a radio**, set **Settings › Mode** to **Live**, and read the log in **Settings › Diagnostics**.
+
 ## Before you start
 
 - A companion radio on BLE companion firmware, charged, with its PIN to hand.
@@ -22,7 +24,7 @@ The spike reads from the radio only. It never sends on the mesh and never change
 4. **Screen-off test.** Let the screen go off, put the watch on, and leave it for at least 30 minutes. If you can, have someone post on one of the radio's channels during that time.
 5. Wake the watch and read the log: every drop is logged as `link down after N min` with a reason, and every reconnect try is logged.
 6. **Dictation test.** Turn on airplane mode, and if the watch is paired to a phone turn the phone's Bluetooth off too. Tap **Test dictation** and say a short field message, for example "At the trailhead, heading up in ten". Repeat with Wi-Fi on for comparison. Each result is logged with its time and what network the watch had.
-7. Tap **Disconnect** when done.
+7. Tap **Disconnect** when done. In the app as it is now, set **Settings › Mode** back to **Check-in** to end a Live run.
 
 ## Getting the log off the watch
 

@@ -33,6 +33,8 @@ class SyncRecorder(
     private val log: (String) -> Unit,
     private val clock: () -> Long = System::currentTimeMillis,
     private val also: CompanionClient.Listener = object : CompanionClient.Listener {},
+    /** Each message newly stored, on the storage thread, right after it is written; for notifications. */
+    private val onStored: (IncomingMessage) -> Unit = {},
 ) : CompanionClient.Listener by also {
     /** Every contact this connection reads is marked with this time, and a full read with it. */
     private val readAt = clock()
@@ -130,6 +132,7 @@ class SyncRecorder(
     private fun add(message: IncomingMessage) = write {
         if (store.addMessage(message)) {
             stored.incrementAndGet()
+            onStored(message)
         } else {
             repeated.incrementAndGet()
             log("Already stored, not kept twice: ${message.conversation}, sent ${message.sentAt}, from \"${message.sender}\"")

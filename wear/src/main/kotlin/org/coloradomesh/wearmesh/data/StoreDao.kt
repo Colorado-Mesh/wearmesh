@@ -72,6 +72,16 @@ interface StoreDao {
     @Query("SELECT * FROM messages WHERE radio = :radio AND conversation = :conversation ORDER BY id")
     fun messagesFlow(radio: String, conversation: String): Flow<List<MessageRow>>
 
+    /** A conversation's newest unread messages, newest first, for its notification. */
+    @Query(
+        "SELECT * FROM messages WHERE radio = :radio AND conversation = :conversation AND read = 0 " +
+            "ORDER BY id DESC LIMIT :limit",
+    )
+    fun unreadMessages(radio: String, conversation: String, limit: Int): List<MessageRow>
+
+    @Query("SELECT name FROM contacts WHERE radio = :radio AND prefix = :prefix LIMIT 1")
+    fun contactName(radio: String, prefix: String): String?
+
     @Query("UPDATE messages SET read = 1 WHERE radio = :radio AND conversation = :conversation AND read = 0")
     fun markRead(radio: String, conversation: String)
 

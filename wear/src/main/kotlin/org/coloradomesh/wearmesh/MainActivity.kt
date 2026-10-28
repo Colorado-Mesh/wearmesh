@@ -20,6 +20,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.wear.compose.material.MaterialTheme
@@ -34,6 +36,8 @@ import org.coloradomesh.meshcore.ble.FoundRadio
 import org.coloradomesh.meshcore.ble.RadioScanner
 import org.coloradomesh.wearmesh.data.ConversationLast
 import org.coloradomesh.wearmesh.data.Storage
+import org.coloradomesh.wearmesh.notify.Notifier
+import org.coloradomesh.wearmesh.notify.NotifyRules
 import org.coloradomesh.wearmesh.ui.ConfirmScreen
 import org.coloradomesh.wearmesh.ui.ConversationScreen
 import org.coloradomesh.wearmesh.ui.DiagnosticsScreen
@@ -41,6 +45,8 @@ import org.coloradomesh.wearmesh.ui.FindRadioScreen
 import org.coloradomesh.wearmesh.ui.ForgottenScreen
 import org.coloradomesh.wearmesh.ui.HomeRows
 import org.coloradomesh.wearmesh.ui.HomeScreen
+import org.coloradomesh.wearmesh.ui.NotificationsScreen
+import org.coloradomesh.wearmesh.ui.NotifyRow
 import org.coloradomesh.wearmesh.ui.RadioScreen
 import org.coloradomesh.wearmesh.ui.RadiosScreen
 import org.coloradomesh.wearmesh.ui.SettingsScreen
@@ -57,9 +63,17 @@ class MainActivity : ComponentActivity() {
     private val found = mutableStateListOf<FoundRadio>()
     private var scanning by mutableStateOf(false)
     private var notice by mutableStateOf<String?>(null)
-    private var checkInOn by mutableStateOf(false)
+    private var mode by mutableStateOf(Mode.Kind.LIVE)
     private var intervalMinutes by mutableStateOf(15)
     private var exactAlarmsAllowed by mutableStateOf(true)
+    private var notificationsAllowed by mutableStateOf(true)
+    private var offerAnswered by mutableStateOf(false)
+
+    /** A conversation to open, from a tapped notification: radio, conversation, title. */
+    private var toOpen by mutableStateOf<Triple<String, String, String>?>(null)
+
+    /** Whether this activity has already taken a notification's conversation from its intent. */
+    private var openedFromNotification = false
 
     /** Whether the last radio forgotten was the one in use, which leaves the watch on Welcome. */
     private var forgotInUse by mutableStateOf(false)
@@ -81,12 +95,41 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         SpikeLog.init(this)
         scanner = RadioScanner(this)
-        checkInOn = CheckIn.isOn(this)
+        mode = Mode.get(this)
         intervalMinutes = CheckIn.intervalMinutes(this)
+        offerAnswered = Mode.promptDone(this)
         Radios.load(this)
         SyncStatus.load(this)
+        Notifier.createChannels(this)
+        Notifier.loadChoices(this, Radios.state.value?.chosen?.address)
+        // A notification's conversation opens once: not again when the activity is recreated
+        // after opening it, nor when it is relaunched from Recents.
+        if (savedInstanceState?.getBoolean(OPENED_FROM_NOTIFICATION) != true) openFrom(intent)
         val start = if (Radios.state.value?.chosen != null) HOME else WELCOME
         setContent { MaterialTheme { App(start) } }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(OPENED_FROM_NOTIFICATION, openedFromNotification)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        openFrom(intent)
+    }
+
+    /** A tapped notification names the conversation to open. */
+    private fun openFrom(intent: Intent?) {
+        if (intent == null || (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0) return
+        val radio = intent.getStringExtra(Notifier.EXTRA_RADIO) ?: return
+        val conversation = intent.getStringExtra(Notifier.EXTRA_CONVERSATION) ?: return
+        toOpen = Triple(radio, conversation, intent.getStringExtra(Notifier.EXTRA_TITLE) ?: conversation)
+        openedFromNotification = true
+        intent.removeExtra(Notifier.EXTRA_RADIO)
+        intent.removeExtra(Notifier.EXTRA_CONVERSATION)
+        intent.removeExtra(Notifier.EXTRA_TITLE)
     }
 
     override fun onStart() {
@@ -98,6 +141,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         // The user may have just allowed "Alarms & reminders" in Settings.
         exactAlarmsAllowed = CheckIn.exactAlarmsAllowed(this)
+        notificationsAllowed = Notifier.enabled(this)
         Storage.refreshCounts(this)
     }
 
@@ -108,12 +152,28 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Opening the app syncs (decided for M2), unless Live holds the radio, a sync is running, or
-     * one ended, worked or not, in the last [OPEN_SYNC_GAP_MS]: a watch comes on screen at every
-     * glance, and a radio that is not answering should not be tried at each one.
+     * Opening the app syncs (decided for M2). In Live mode that means holding the link, if it is
+     * not held already (after a restart, say). In Check-in mode it is a brief sync, unless a sync is
+     * running or one ended, worked or not, in the last [OPEN_SYNC_GAP_MS]: a watch comes on screen
+     * at every glance, and a radio that is not answering should not be tried at each one.
      */
     private fun syncOnOpen() {
-        if (Radios.state.value?.chosen == null || SpikeState.state.value.running || !hasBluetoothPermission()) return
+        val radio = Radios.state.value?.chosen ?: return
+        if (SpikeState.state.value.running || !hasBluetoothPermission()) return
+        if (Mode.get(this) == Mode.Kind.LIVE) {
+            // A check-in still holding the radio would make Live's first connection fail.
+            afterSyncEnds(
+                action = {
+                    try {
+                        if (onScreen() && !SpikeState.state.value.running) SpikeService.connect(this, radio.address)
+                    } catch (e: IllegalStateException) {
+                        SpikeLog.log("Live (app opened): could not start (${e.message})")
+                    }
+                },
+                onTimeout = { SpikeLog.log("Live (app opened): a check-in is still running; Live starts when the app is next opened") },
+            )
+            return
+        }
         val status = SyncStatus.state.value
         val lastEnded = maxOf(status.lastSyncAt, status.lastAttemptAt)
         if (status.syncing || System.currentTimeMillis() - lastEnded < OPEN_SYNC_GAP_MS) return
@@ -169,7 +229,7 @@ class MainActivity : ComponentActivity() {
         scanning = false
         afterLiveStops {
             Radios.choose(this, radio)
-            CheckIn.now(this)
+            if (Mode.get(this) == Mode.Kind.LIVE) SpikeService.connect(this, radio.address) else CheckIn.now(this)
         }
     }
 
@@ -196,15 +256,60 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun toggleCheckIn() = withPermissions {
-        checkInOn = !checkInOn
-        CheckIn.setOn(this, checkInOn)
-        exactAlarmsAllowed = CheckIn.exactAlarmsAllowed(this)
+    private fun switchMode(kind: Mode.Kind) = withPermissions {
+        mode = kind
+        // Live waits for a check-in under way to let go of the radio. By then the user may have
+        // chosen again, or left the app: the latest choice wins, and Live's link is only started
+        // with the app on screen (otherwise it starts when the app is next opened).
+        val apply = {
+            if (mode == kind) {
+                Mode.set(this, kind, startLive = onScreen())
+                exactAlarmsAllowed = CheckIn.exactAlarmsAllowed(this)
+            }
+        }
+        if (kind == Mode.Kind.LIVE) {
+            afterSyncEnds(
+                action = apply,
+                onTimeout = {
+                    // Never two links to one radio: record Live, start it at the next opening.
+                    if (mode == kind) Mode.set(this, kind, startLive = false)
+                    SpikeLog.log("Mode: Live; a check-in is still running, so the link starts when the app is next opened")
+                },
+            )
+        } else {
+            apply()
+        }
     }
 
-    private fun toggleLive() = withPermissions {
-        val radio = Radios.state.value?.chosen ?: return@withPermissions
-        if (SpikeState.state.value.running) SpikeService.stop(this) else SpikeService.connect(this, radio.address)
+    private fun onScreen(): Boolean = lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+
+    /**
+     * Runs [action] now, or once the check-in under way ends. If it has not ended within
+     * [SYNC_END_WAIT_MS], runs [onTimeout] instead, so the two never hold the radio at once.
+     */
+    private fun afterSyncEnds(action: () -> Unit, onTimeout: () -> Unit) {
+        if (!SyncStatus.state.value.syncing) {
+            action()
+            return
+        }
+        lifecycleScope.launch {
+            val ended = withTimeoutOrNull(SYNC_END_WAIT_MS) { SyncStatus.state.first { !it.syncing } }
+            if (ended != null) action() else onTimeout()
+        }
+    }
+
+    private fun answerOffer(switch: Boolean) {
+        Mode.markPromptDone(this)
+        offerAnswered = true
+        if (switch) switchMode(Mode.Kind.CHECK_IN)
+    }
+
+    private fun openNotificationSettings() {
+        try {
+            startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
+        } catch (e: ActivityNotFoundException) {
+            notice = "This watch has no page for that"
+        }
     }
 
     private fun openSettingsPage(action: String, withPackage: Boolean) {
@@ -228,6 +333,20 @@ class MainActivity : ComponentActivity() {
         val goHome = { nav.navigate(HOME) { popUpTo(nav.graph.id) { inclusive = true } } }
         // Every stored query is for the radio in use; another radio's history waits until it is chosen again.
         val radioInUse = radios?.chosen?.address.orEmpty()
+        val choices by Notifier.choices.collectAsStateWithLifecycle()
+        val openConversation = { conversation: String, title: String ->
+            nav.navigate("$CONVERSATION/${Uri.encode(conversation)}/${Uri.encode(title)}")
+        }
+
+        // A tapped notification opens its conversation, if it is for the radio in use.
+        LaunchedEffect(toOpen) {
+            val target = toOpen ?: return@LaunchedEffect
+            toOpen = null
+            if (target.first == radioInUse) {
+                nav.navigate(HOME) { popUpTo(nav.graph.id) { inclusive = true } }
+                openConversation(target.second, target.third)
+            }
+        }
 
         SwipeDismissableNavHost(navController = nav, startDestination = start) {
             composable(WELCOME) { WelcomeScreen(onFind = { nav.navigate(FIND) }) }
@@ -247,8 +366,11 @@ class MainActivity : ComponentActivity() {
                     rows = HomeRows.build(channels, lasts),
                     now = now,
                     checkNowEnabled = !link.running && !sync.syncing,
+                    // Once, after Live has first connected.
+                    offerCheckIn = mode == Mode.Kind.LIVE && !offerAnswered && link.running && link.link == "Connected",
                     onCheckNow = { withPermissions { CheckIn.now(this@MainActivity) } },
-                    onOpen = { row -> nav.navigate("$CONVERSATION/${Uri.encode(row.conversation)}/${Uri.encode(row.title)}") },
+                    onOfferAnswered = { switch -> answerOffer(switch) },
+                    onOpen = { row -> openConversation(row.conversation, row.title) },
                     onRadios = { nav.navigate(RADIOS) },
                     onSettings = { nav.navigate(SETTINGS) },
                 )
@@ -258,12 +380,23 @@ class MainActivity : ComponentActivity() {
                 val key = entry.arguments?.getString("key").orEmpty()
                 val title = entry.arguments?.getString("title").orEmpty()
                 val messages by remember(radioInUse, key) { dao.messagesFlow(radioInUse, key) }.collectAsStateWithLifecycle(emptyList())
+                val channels by remember(radioInUse) { dao.channelsFlow(radioInUse) }.collectAsStateWithLifecycle(emptyList())
+                val kind = NotifyRules.kindOf(key, channels.firstOrNull { "c:${it.slot}" == key }?.kind)
+                // While this conversation is on screen it does not notify, and its notification goes.
+                LifecycleResumeEffect(radioInUse, key) {
+                    Notifier.onScreen(this@MainActivity, radioInUse, key)
+                    onPauseOrDispose { Notifier.onScreen(this@MainActivity, null, null) }
+                }
                 ConversationScreen(
                     title = title,
                     messages = messages,
                     selfName = remember { Prefs.of(this@MainActivity).getString(Prefs.SELF_NAME, null) },
                     now = now,
+                    notifyOn = NotifyRules.isOn(key, kind, choices),
                     onSeen = { Storage.later { dao.markRead(radioInUse, key) } },
+                    onToggleNotify = {
+                        Notifier.setChoice(this@MainActivity, radioInUse, key, kind, !NotifyRules.isOn(key, kind, choices))
+                    },
                 )
             }
 
@@ -346,23 +479,42 @@ class MainActivity : ComponentActivity() {
             composable(SETTINGS) {
                 SettingsScreen(
                     state = SettingsState(
-                        checkInOn = checkInOn,
+                        live = mode == Mode.Kind.LIVE,
                         intervalMinutes = intervalMinutes,
                         alarmsAllowed = exactAlarmsAllowed,
                         liveRunning = link.running,
                         hasRadio = radios?.chosen != null,
                         syncing = sync.syncing,
+                        notificationsAllowed = notificationsAllowed,
                     ),
-                    onCheckIn = { toggleCheckIn() },
+                    onMode = {
+                        switchMode(if (mode == Mode.Kind.LIVE) Mode.Kind.CHECK_IN else Mode.Kind.LIVE)
+                        // Choosing a mode answers the first-run offer too.
+                        Mode.markPromptDone(this@MainActivity)
+                        offerAnswered = true
+                    },
                     onInterval = { intervalMinutes = CheckIn.nextInterval(this@MainActivity) },
                     onAllowAlarms = { openSettingsPage(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, withPackage = true) },
-                    onLive = { toggleLive() },
+                    onNotifications = { nav.navigate(NOTIFICATIONS) },
+                    onAllowNotifications = { openNotificationSettings() },
                     onReadEverything = {
                         withPermissions { CheckIn.now(this@MainActivity, full = true) }
                         goHome()
                     },
                     onDiagnostics = { nav.navigate(DIAGNOSTICS) },
                 )
+            }
+
+            composable(NOTIFICATIONS) {
+                val channels by remember(radioInUse) { dao.channelsFlow(radioInUse) }.collectAsStateWithLifecycle(emptyList())
+                val lasts by remember(radioInUse) { dao.lastMessagesFlow(radioInUse) }.collectAsStateWithLifecycle(emptyList<ConversationLast>())
+                val rows = HomeRows.build(channels, lasts).map { row ->
+                    val kind = NotifyRules.kindOf(row.conversation, channels.firstOrNull { "c:${it.slot}" == row.conversation }?.kind)
+                    NotifyRow(row.conversation, row.title, kind, NotifyRules.isOn(row.conversation, kind, choices))
+                }
+                NotificationsScreen(rows = rows) { row ->
+                    Notifier.setChoice(this@MainActivity, radioInUse, row.conversation, row.kind, !row.on)
+                }
             }
 
             composable(DIAGNOSTICS) {
@@ -397,10 +549,15 @@ class MainActivity : ComponentActivity() {
         const val FORGOTTEN = "forgotten"
         const val SETTINGS = "settings"
         const val DIAGNOSTICS = "diagnostics"
+        const val NOTIFICATIONS = "notifications"
 
         /** No sync on opening the app if the last one finished this recently. */
         const val OPEN_SYNC_GAP_MS = 2 * 60_000L
         const val NOW_TICK_MS = 30_000L
         const val LIVE_STOP_WAIT_MS = 10_000L
+
+        /** Longer than a check-in's own limit, so Live never starts while one holds the radio. */
+        const val SYNC_END_WAIT_MS = 120_000L
+        const val OPENED_FROM_NOTIFICATION = "opened_from_notification"
     }
 }
