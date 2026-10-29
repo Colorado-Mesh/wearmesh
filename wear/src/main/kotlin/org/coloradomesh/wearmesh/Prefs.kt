@@ -34,6 +34,12 @@ object Prefs {
     /** Whether the first-run offer to move from Live to Check-in has been answered. */
     const val MODE_PROMPT_DONE = "mode_prompt_done"
 
+    /**
+     * Set by Quit: nothing runs in the background (no Live link, no Check-in alarm) until the app
+     * is opened again, which clears it and carries on in the mode that was in use.
+     */
+    const val QUIT = "quit"
+
     /** Notification choices for one radio's conversations; the key is this plus the radio's address. */
     const val NOTIFY_CHOICES = "notify_choices_"
 

@@ -16,7 +16,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Check-in: an exact alarm that also fires in Doze ("Alarms & reminders", allowed by the
          user), a wake lock for the length of each check-in, and setting the alarm again after a
-         restart. -->
+         restart. Live times its reconnect pauses with the same kind of alarm. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
@@ -61,6 +61,11 @@
 
         <receiver
             android:name=".CheckInAlarmReceiver"
+            android:exported="false" />
+
+        <!-- Ends a Live reconnect pause, also in Doze. -->
+        <receiver
+            android:name=".LiveReconnectReceiver"
             android:exported="false" />
 
         <!-- System broadcasts reach it although it is not exported. -->

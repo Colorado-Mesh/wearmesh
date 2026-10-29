@@ -33,6 +33,7 @@ fun SettingsScreen(
     onAllowNotifications: () -> Unit,
     onReadEverything: () -> Unit,
     onDiagnostics: () -> Unit,
+    onQuit: () -> Unit,
 ) {
     ScreenList {
         item { ListHeader { Text("Settings") } }
@@ -75,6 +76,14 @@ fun SettingsScreen(
             }
         }
         item { WideChip("Diagnostics", secondary = true) { onDiagnostics() } }
+        item {
+            WideChip(
+                "Quit WearMesh",
+                detail = "Stops Live and check-ins until you open it again",
+                secondary = true,
+                detailLines = 2,
+            ) { onQuit() }
+        }
     }
 }
 

@@ -1,5 +1,6 @@
 package org.coloradomesh.wearmesh
 
+import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -11,6 +12,7 @@ import android.os.BatteryManager
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -36,9 +38,15 @@ import java.util.Collections
  * nothing on the mesh.
  *
  * When the link drops it reconnects with a growing pause (30 s doubling up to 5 min) and logs how
- * long each link lasted. Each time the protocol client reads the radio's battery (about every
- * 5 minutes by the wall clock) it logs the watch's own battery too, which is what the M0 battery
- * measurement is read from. A Handler timer would not do: its clock stops while the watch sleeps,
+ * long each link lasted. The pause is timed by an exact alarm that fires in Doze as well as by a
+ * Handler, whichever comes first: a Handler alone stops while the watch sleeps, which held Live
+ * down for 18 minutes after one drop in the step 5 carry. In Doze the system lets such an alarm
+ * fire at most about every 9 minutes, so a pause can stretch to that. Each reconnect holds a
+ * partial wake lock until the link is up or has failed, so its own time limits run.
+ *
+ * Each time the protocol client reads the radio's battery (about every 5 minutes by the wall
+ * clock) it logs the watch's own battery too, which is what the battery measurements are read
+ * from. A Handler timer would not do: its clock stops while the watch sleeps,
  * so with the screen off it hardly ever fires.
  *
  * All state is kept on the main thread; callbacks from the link and the protocol client are posted
@@ -60,6 +68,9 @@ class SpikeService : Service() {
     private var linkUpAt = 0L
     private var contactsSeen = 0
     private var channelNames: Map<Int, String> = emptyMap()
+
+    /** Held from a reconnect's start until its link is up or closed, at most [RECONNECT_WAKE_MS]. */
+    private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -89,6 +100,14 @@ class SpikeService : Service() {
                 SpikeLog.log("M0: connecting to $target; watch battery ${watchBattery()}%")
                 openSession()
             }
+            ACTION_RECONNECT -> {
+                if (address == null) {
+                    // A stale alarm, after the service had stopped.
+                    if (session == null) stopSelf()
+                } else {
+                    reconnectNow("alarm")
+                }
+            }
             ACTION_STOP -> {
                 stopping = true
                 val open = session
@@ -105,6 +124,8 @@ class SpikeService : Service() {
         recorder?.finish()
         recorder = null
         main.removeCallbacksAndMessages(null)
+        cancelReconnectAlarm()
+        releaseWakeLock()
         super.onDestroy()
     }
 
@@ -142,6 +163,7 @@ class SpikeService : Service() {
     private fun linkReady(packetSize: Int) {
         linkUpAt = SystemClock.elapsedRealtime()
         reconnects = 0
+        releaseWakeLock()
         SpikeLog.log("M0: link up, packet size $packetSize bytes")
         SpikeState.update { it.copy(link = "Connected", packetSize = packetSize) }
         goForeground("Connected")
@@ -149,6 +171,7 @@ class SpikeService : Service() {
 
     private fun linkClosed(reason: String) {
         session = null
+        releaseWakeLock()
         recorder?.finish()
         recorder = null
         Storage.refreshCounts(this)
@@ -166,11 +189,55 @@ class SpikeService : Service() {
         SpikeLog.log("M0: reconnecting in ${pause / 1000} s (try $reconnects)")
         SpikeState.update { it.copy(link = "Reconnecting in ${pause / 1000} s", packetSize = null) }
         goForeground("Link lost; reconnecting")
-        main.postDelayed({ if (!stopping && session == null) openSession() }, pause)
+        main.postDelayed(reconnectTimer, pause)
+        val alarms = getSystemService(AlarmManager::class.java)
+        val at = SystemClock.elapsedRealtime() + pause
+        if (alarms.canScheduleExactAlarms()) {
+            alarms.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, at, reconnectIntent())
+        } else {
+            // Without "Alarms & reminders" the system picks the moment, still also in Doze.
+            alarms.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, at, reconnectIntent())
+        }
+    }
+
+    /** The end of a reconnect pause, from the Handler or the alarm, whichever comes first. */
+    private val reconnectTimer = Runnable { reconnectNow("timer") }
+
+    private fun reconnectNow(by: String) {
+        main.removeCallbacks(reconnectTimer)
+        cancelReconnectAlarm()
+        if (stopping || session != null) return
+        if (by == "alarm") SpikeLog.log("M0: reconnecting now (woken by the alarm)")
+        acquireWakeLock()
+        openSession()
+    }
+
+    /** A broadcast, not a service intent: the system keeps the watch awake while a receiver runs. */
+    private fun reconnectIntent(): PendingIntent = PendingIntent.getBroadcast(
+        this,
+        RECONNECT_REQUEST,
+        Intent(this, LiveReconnectReceiver::class.java),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+
+    private fun cancelReconnectAlarm() = getSystemService(AlarmManager::class.java).cancel(reconnectIntent())
+
+    private fun acquireWakeLock() {
+        val lock = wakeLock ?: getSystemService(PowerManager::class.java)
+            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "WearMesh:live-reconnect")
+            .apply { setReferenceCounted(false) }
+            .also { wakeLock = it }
+        lock.acquire(RECONNECT_WAKE_MS)
+    }
+
+    private fun releaseWakeLock() {
+        wakeLock?.let { if (it.isHeld) it.release() }
     }
 
     private fun finish() {
         main.removeCallbacksAndMessages(null)
+        cancelReconnectAlarm()
+        releaseWakeLock()
         SpikeLog.log("M0: stopped; watch battery ${watchBattery()}%")
         SpikeState.update { SpikeState.Snapshot() }
         address = null
@@ -279,11 +346,16 @@ class SpikeService : Service() {
     companion object {
         private const val ACTION_CONNECT = "org.coloradomesh.wearmesh.CONNECT"
         private const val ACTION_STOP = "org.coloradomesh.wearmesh.STOP"
+        private const val ACTION_RECONNECT = "org.coloradomesh.wearmesh.RECONNECT"
         private const val EXTRA_ADDRESS = "address"
         private const val CHANNEL_ID = "link"
         private const val NOTIFICATION_ID = 1
         private const val RECONNECT_FIRST_MS = 30_000L
         private const val RECONNECT_MAX_MS = 5 * 60_000L
+
+        /** Longer than a connection with all its tries; released as soon as it is up or failed. */
+        private const val RECONNECT_WAKE_MS = 90_000L
+        private const val RECONNECT_REQUEST = 10
 
         /** The name the watch gives the radio when it says hello. */
         const val APP_NAME = "WearMesh"
@@ -293,6 +365,11 @@ class SpikeService : Service() {
             context.startForegroundService(
                 Intent(context, SpikeService::class.java).setAction(ACTION_CONNECT).putExtra(EXTRA_ADDRESS, address),
             )
+        }
+
+        /** From [LiveReconnectReceiver]: the reconnect pause is over. */
+        fun reconnect(context: Context) {
+            context.startService(Intent(context, SpikeService::class.java).setAction(ACTION_RECONNECT))
         }
 
         fun stop(context: Context) {

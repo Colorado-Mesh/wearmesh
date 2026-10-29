@@ -50,18 +50,21 @@ object CheckIn {
             SpikeLog.log("Check-in: turned on, every ${intervalMinutes(context)} min")
             scheduleNext(context, FIRST_DELAY_MS)
         } else {
-            alarms(context).cancel(alarmIntent(context))
+            cancelAlarm(context)
             SpikeLog.log("Check-in: turned off")
         }
     }
 
+    /** Cancels the next check-in without turning Check-in off, for Quit. */
+    fun cancelAlarm(context: Context) = alarms(context).cancel(alarmIntent(context))
+
     /**
      * Sets the next alarm, replacing any already set. Called by each alarm, after a restart or an
      * app update (which clear alarms), and when the permission is granted. Does nothing while
-     * Check-in is off.
+     * Check-in is off, or after Quit until the app is opened again.
      */
     fun scheduleNext(context: Context, delayMs: Long? = null) {
-        if (!isOn(context)) return
+        if (!isOn(context) || Mode.hasQuit(context)) return
         val delay = delayMs ?: (intervalMinutes(context) * 60_000L)
         if (!exactAlarmsAllowed(context)) {
             SpikeLog.log("Check-in: not scheduled, \"Alarms & reminders\" is not allowed for WearMesh")

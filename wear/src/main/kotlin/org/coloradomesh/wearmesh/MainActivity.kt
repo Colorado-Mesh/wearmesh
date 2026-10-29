@@ -134,6 +134,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        // Opening the app after Quit carries on in the mode in use before.
+        Mode.resumeAfterQuit(this)
         syncOnOpen()
     }
 
@@ -296,6 +298,14 @@ class MainActivity : ComponentActivity() {
             val ended = withTimeoutOrNull(SYNC_END_WAIT_MS) { SyncStatus.state.first { !it.syncing } }
             if (ended != null) action() else onTimeout()
         }
+    }
+
+    /** Quit: nothing runs until the app is opened again; the screen closes and leaves Recents. */
+    private fun quit() {
+        scanner.stop()
+        scanning = false
+        Mode.quit(this)
+        finishAndRemoveTask()
     }
 
     private fun answerOffer(switch: Boolean) {
@@ -502,6 +512,7 @@ class MainActivity : ComponentActivity() {
                         goHome()
                     },
                     onDiagnostics = { nav.navigate(DIAGNOSTICS) },
+                    onQuit = { quit() },
                 )
             }
 

@@ -17,6 +17,8 @@ import kotlinx.coroutines.launch
 class CheckInAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         SpikeLog.init(context)
+        // An alarm already on its way when Quit cancelled it.
+        if (Mode.hasQuit(context)) return
         CheckIn.scheduleNext(context)
         try {
             CheckInService.start(context, "scheduled")

@@ -92,7 +92,15 @@ object Notifier {
      * sync after being chosen. Call on the storage thread: it reads the store.
      */
     fun afterSync(context: Context, radio: String, messages: List<IncomingMessage>, backlog: Boolean) {
-        if (messages.isEmpty() || backlog || !allowed(context)) return
+        if (messages.isEmpty()) return
+        if (backlog) {
+            SpikeLog.log("Notifications: none for the ${messages.size} messages waiting on a radio just chosen")
+            return
+        }
+        if (!allowed(context)) {
+            SpikeLog.log("Notifications: off for WearMesh in the watch's settings; ${messages.size} new messages not notified")
+            return
+        }
         val dao = Storage.dao(context)
         val channels = dao.channels(radio).associateBy { it.slot }
         val choices = readChoices(context, radio)
@@ -101,6 +109,8 @@ object Notifier {
         var buzz = false
         var posted = 0
         var anyDirect = false
+        // For the log: each conversation notified, marked when only a mention of this radio made it.
+        val shown = ArrayList<String>()
         for ((conversation, arrived) in messages.groupBy { it.conversation }) {
             val channel = channels[conversation.removePrefix("c:").toIntOrNull() ?: -1]?.takeIf { conversation.startsWith("c:") }
             val kind = NotifyRules.kindOf(conversation, channel?.kind)
@@ -136,8 +146,10 @@ object Notifier {
             if (kind == NotifyRules.Kind.DIRECT) anyDirect = true
             notify(context, idFor(radio, conversation), notification)
             posted++
+            shown.add(if (on) title else "$title, mention")
         }
         if (posted == 0) return
+        SpikeLog.log("Notified: ${shown.joinToString("; ")}; " + if (buzz) "buzzed" else "silent, as these buzzed within 5 min")
         // The summary alone buzzes, so it takes the direct-message channel's sound when one came.
         val summary = NotificationCompat.Builder(context, if (anyDirect) CHANNEL_DIRECT else CHANNEL_CHANNELS)
             .setSmallIcon(R.drawable.ic_notification)
