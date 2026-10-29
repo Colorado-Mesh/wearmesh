@@ -78,7 +78,7 @@ Only the connection service touches BLE; everything above it works on parsed mes
 
 ## Connection strategy and power
 
-The app has two connection modes, one setting in Settings › Mode that stays until changed: Live for instant alerts, Check-in for battery life. A new install starts in Live and is offered Check-in once (M2 step 4, [M2-step4-notifications.md](M2-step4-notifications.md)). A third, Manual mode (connect only with the app on screen) was in the first plan and was dropped: opening the app syncs in either mode.
+The app has two connection modes, one setting in Settings › Mode that stays until changed: Live for instant alerts, Check-in for battery life. A new install starts in Live and is offered Check-in once (M2 step 4, [M2-step4-notifications.md](M2-step4-notifications.md)). A third, Manual mode (connect only with the app on screen) was in the first plan and was dropped: opening the app syncs in either mode. Settings › Quit WearMesh stops both until the app is next opened, which carries on in the same mode (M2 step 5).
 
 | Mode | How it works | Alerts | Battery cost | Use when |
 | --- | --- | --- | --- | --- |
@@ -94,7 +94,7 @@ Connection lifecycle:
 3. Refresh channels: CMD_GET_CHANNEL for each slot; cache names locally.
 4. Drain: CMD_SYNC_NEXT_MESSAGE until the queue is empty.
 5. Idle (Live) or disconnect (Check-in).
-6. On link loss: exponential backoff reconnect in Live; give up until next interval otherwise.
+6. On link loss: exponential backoff reconnect in Live, timed by an alarm that also fires in Doze (M2 step 5); give up until next interval otherwise.
 
 One request is in flight at a time with a timeout, as the protocol doc recommends; responses are matched to the request queue in order.
 

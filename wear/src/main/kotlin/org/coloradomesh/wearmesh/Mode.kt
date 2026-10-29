@@ -39,6 +39,32 @@ object Mode {
         SpikeLog.log("Mode: ${if (kind == Kind.LIVE) "Live" else "Check-in"}")
     }
 
+    /**
+     * Quit (decided 28 October): stops Live and cancels the Check-in alarm, so nothing runs until
+     * the app is opened again. The mode itself is kept, and [resumeAfterQuit] carries on in it.
+     * A check-in already under way finishes; it sets no next alarm.
+     */
+    fun quit(context: Context) {
+        Prefs.of(context).edit().putBoolean(Prefs.QUIT, true).apply()
+        if (SpikeState.state.value.running) SpikeService.stop(context)
+        CheckIn.cancelAlarm(context)
+        SpikeLog.log("Quit: Live stopped and check-ins cancelled until WearMesh is opened again")
+    }
+
+    fun hasQuit(context: Context): Boolean = Prefs.of(context).getBoolean(Prefs.QUIT, false)
+
+    /**
+     * On opening the app after Quit: back to the mode in use before. Check-in sets its next alarm
+     * here; Live is started by the app's usual sync on opening.
+     */
+    fun resumeAfterQuit(context: Context) {
+        if (!hasQuit(context)) return
+        Prefs.of(context).edit().remove(Prefs.QUIT).apply()
+        val kind = get(context)
+        SpikeLog.log("Opened after Quit: back to ${if (kind == Kind.LIVE) "Live" else "Check-in"}")
+        if (kind == Kind.CHECK_IN) CheckIn.scheduleNext(context)
+    }
+
     fun promptDone(context: Context): Boolean = Prefs.of(context).getBoolean(Prefs.MODE_PROMPT_DONE, false)
 
     fun markPromptDone(context: Context) = Prefs.of(context).edit().putBoolean(Prefs.MODE_PROMPT_DONE, true).apply()

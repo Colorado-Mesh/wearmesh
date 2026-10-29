@@ -12,7 +12,7 @@ import android.content.Intent
 class CheckInRescheduler : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         SpikeLog.init(context)
-        if (!CheckIn.isOn(context)) return
+        if (!CheckIn.isOn(context) || Mode.hasQuit(context)) return
         val why = when (intent.action) {
             Intent.ACTION_BOOT_COMPLETED -> "the watch restarted"
             Intent.ACTION_MY_PACKAGE_REPLACED -> "the app was updated"

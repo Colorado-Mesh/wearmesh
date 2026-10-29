@@ -20,7 +20,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
@@ -134,6 +133,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        visible = true
+        // Opening the app after Quit carries on in the mode in use before.
+        Mode.resumeAfterQuit(this)
         syncOnOpen()
     }
 
@@ -146,6 +148,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStop() {
+        visible = false
         scanner.stop()
         scanning = false
         super.onStop()
@@ -281,7 +284,14 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun onScreen(): Boolean = lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+    /**
+     * Set in [onStart] itself, not read from the lifecycle: the lifecycle only reports STARTED once
+     * onStart has returned, so the sync on opening, which runs in onStart, took the app for off
+     * screen and never started Live.
+     */
+    private var visible = false
+
+    private fun onScreen(): Boolean = visible
 
     /**
      * Runs [action] now, or once the check-in under way ends. If it has not ended within
@@ -296,6 +306,14 @@ class MainActivity : ComponentActivity() {
             val ended = withTimeoutOrNull(SYNC_END_WAIT_MS) { SyncStatus.state.first { !it.syncing } }
             if (ended != null) action() else onTimeout()
         }
+    }
+
+    /** Quit: nothing runs until the app is opened again; the screen closes and leaves Recents. */
+    private fun quit() {
+        scanner.stop()
+        scanning = false
+        Mode.quit(this)
+        finishAndRemoveTask()
     }
 
     private fun answerOffer(switch: Boolean) {
@@ -502,6 +520,7 @@ class MainActivity : ComponentActivity() {
                         goHome()
                     },
                     onDiagnostics = { nav.navigate(DIAGNOSTICS) },
+                    onQuit = { quit() },
                 )
             }
 

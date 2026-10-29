@@ -19,6 +19,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.coloradomesh.meshcore.ble.RadioSession
 import org.coloradomesh.meshcore.protocol.CompanionClient
 import org.coloradomesh.meshcore.protocol.SelfInfo
+import org.coloradomesh.wearmesh.data.Delays
 import org.coloradomesh.wearmesh.data.IncomingMessage
 import org.coloradomesh.wearmesh.data.Storage
 import org.coloradomesh.wearmesh.data.SyncPlan
@@ -219,7 +220,9 @@ object CheckInRun {
         val total = (SystemClock.elapsedRealtime() - started) / 1000.0
         val battery = watchBattery(app)
         val read = if (plan.fullRead) "full read" else "brief read"
-        val kept = "%d new messages, %d already stored".format(recorder.newMessages, recorder.duplicates)
+        // Complete once the store has caught up; how long new messages waited to reach the watch.
+        val delays = Delays.summary(synchronized(newlyStored) { newlyStored.toList() })?.let { " ($it)" }.orEmpty()
+        val kept = "%d new messages%s, %d already stored".format(recorder.newMessages, delays, recorder.duplicates)
         return when (result) {
             Outcome.Drained -> {
                 val linkSeconds = (linkUpAt.get() - started) / 1000.0
