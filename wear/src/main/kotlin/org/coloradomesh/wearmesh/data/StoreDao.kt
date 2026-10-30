@@ -104,6 +104,10 @@ interface StoreDao {
     @Query(LAST_MESSAGES)
     fun lastMessages(radio: String): List<ConversationLast>
 
+    /** The newest unread messages received in any conversation, newest first, for the Tile (M4). */
+    @Query("SELECT * FROM messages WHERE radio = :radio AND read = 0 AND outgoing = 0 ORDER BY id DESC LIMIT :limit")
+    fun newestUnread(radio: String, limit: Int): List<MessageRow>
+
     @Query("SELECT * FROM messages WHERE radio = :radio AND conversation = :conversation ORDER BY id")
     fun messagesFlow(radio: String, conversation: String): Flow<List<MessageRow>>
 

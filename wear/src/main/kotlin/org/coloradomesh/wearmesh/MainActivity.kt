@@ -39,6 +39,7 @@ import org.coloradomesh.meshcore.ble.RadioScanner
 import org.coloradomesh.wearmesh.data.ConversationLast
 import org.coloradomesh.wearmesh.data.Storage
 import org.coloradomesh.wearmesh.glance.Glances
+import org.coloradomesh.wearmesh.glance.WearMeshTileService
 import org.coloradomesh.wearmesh.notify.Notifier
 import org.coloradomesh.wearmesh.notify.NotifyRules
 import org.coloradomesh.wearmesh.ui.ConfirmScreen
@@ -81,6 +82,9 @@ class MainActivity : ComponentActivity() {
 
     /** A conversation to open, from a tapped notification: radio, conversation, title. */
     private var toOpen by mutableStateOf<OpenRequest?>(null)
+
+    /** Check now on the Tile: the next sync on opening is not held back by [OPEN_SYNC_GAP_MS]. */
+    private var checkNow = false
 
     /** Whether this activity has already taken a notification's conversation from its intent. */
     private var openedFromNotification = false
@@ -134,9 +138,13 @@ class MainActivity : ComponentActivity() {
         openFrom(intent)
     }
 
-    /** A tapped notification names the conversation to open. */
+    /** A tapped notification, or a message on the Tile, names the conversation to open. */
     private fun openFrom(intent: Intent?) {
         if (intent == null || (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0) return
+        if (intent.getBooleanExtra(WearMeshTileService.EXTRA_CHECK_NOW, false)) {
+            checkNow = true
+            intent.removeExtra(WearMeshTileService.EXTRA_CHECK_NOW)
+        }
         val radio = intent.getStringExtra(Notifier.EXTRA_RADIO) ?: return
         val conversation = intent.getStringExtra(Notifier.EXTRA_CONVERSATION) ?: return
         val quick = intent.getBooleanExtra(Notifier.EXTRA_QUICK_REPLY, false)
@@ -178,9 +186,12 @@ class MainActivity : ComponentActivity() {
      * Opening the app syncs (decided for M2). In Live mode that means holding the link, if it is
      * not held already (after a restart, say). In Check-in mode it is a brief sync, unless a sync is
      * running or one ended, worked or not, in the last [OPEN_SYNC_GAP_MS]: a watch comes on screen
-     * at every glance, and a radio that is not answering should not be tried at each one.
+     * at every glance, and a radio that is not answering should not be tried at each one. Check now
+     * on the Tile (decided for M4: it opens the app, which checks) skips that wait.
      */
     private fun syncOnOpen() {
+        val asked = checkNow
+        checkNow = false
         val radio = Radios.state.value?.chosen ?: return
         if (SpikeState.state.value.running || !hasBluetoothPermission()) return
         if (Mode.get(this) == Mode.Kind.LIVE) {
@@ -199,7 +210,8 @@ class MainActivity : ComponentActivity() {
         }
         val status = SyncStatus.state.value
         val lastEnded = maxOf(status.lastSyncAt, status.lastAttemptAt)
-        if (status.syncing || System.currentTimeMillis() - lastEnded < OPEN_SYNC_GAP_MS) return
+        if (status.syncing || (!asked && System.currentTimeMillis() - lastEnded < OPEN_SYNC_GAP_MS)) return
+        if (asked) SpikeLog.log("Tile: Check now")
         try {
             CheckIn.onOpen(this)
         } catch (e: IllegalStateException) {
