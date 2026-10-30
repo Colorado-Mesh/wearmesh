@@ -2,6 +2,8 @@ package org.coloradomesh.wearmesh.data
 
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import org.coloradomesh.meshcore.protocol.Channel
 import org.coloradomesh.meshcore.protocol.Contact
 import org.junit.After
@@ -274,5 +276,25 @@ class RoomMessageStoreTest {
         )
         assertFalse(store.hasContact("aaaaaaaaaaaa"))
         assertTrue(store.favouriteNames().isEmpty())
+    }
+
+    @Test
+    fun newMessageListsFavouriteCompanionsThenTheMostRecentlyHeard() = runBlocking {
+        store.saveContacts(
+            listOf(
+                contact('a', "Ann").copy(flags = Contact.FLAG_FAVOURITE),
+                contact('b', "Bo").copy(lastAdvert = 1_700_000_100),
+                contact('c', "Cy").copy(lastAdvert = 1_700_000_200),
+                // Not a person to message.
+                Contact("d".repeat(64), Contact.TYPE_REPEATER, "Lookout", 1_700_000_300, 0.0, 0.0),
+            ),
+            readAt = 1_800_000_000_000,
+        )
+        val dao = db.dao()
+        assertEquals(listOf("Ann"), dao.favouriteCompanionsFlow(address).first().map { it.name })
+        assertEquals(listOf("Cy", "Bo"), dao.recentCompanionsFlow(address, 20).first().map { it.name })
+        assertEquals(listOf("Cy"), dao.recentCompanionsFlow(address, 1).first().map { it.name })
+        assertEquals("Ann", dao.contactFlow(address, "aaaaaaaaaaaa").first()?.name)
+        assertEquals(null, dao.contactFlow(other.address, "aaaaaaaaaaaa").first())
     }
 }

@@ -20,6 +20,7 @@ fun HomeScreen(
     checkNowEnabled: Boolean,
     offerCheckIn: Boolean,
     onCheckNow: () -> Unit,
+    onNewMessage: () -> Unit,
     onOfferAnswered: (switch: Boolean) -> Unit,
     onOpen: (HomeRow) -> Unit,
     onRadios: () -> Unit,
@@ -35,6 +36,7 @@ fun HomeScreen(
             item { WideChip("Not now", secondary = true) { onOfferAnswered(false) } }
         }
         item { WideChip("Check now", secondary = true, enabled = checkNowEnabled) { onCheckNow() } }
+        item { WideChip("New message", secondary = true) { onNewMessage() } }
         if (rows.isEmpty()) {
             item { Note("No channels yet. They appear after the first sync with the radio.") }
         }

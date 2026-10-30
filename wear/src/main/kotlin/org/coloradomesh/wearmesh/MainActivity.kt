@@ -31,6 +31,7 @@ import androidx.wear.compose.navigation.composable
 import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import org.coloradomesh.meshcore.ble.FoundRadio
@@ -47,6 +48,8 @@ import org.coloradomesh.wearmesh.ui.ForgottenScreen
 import org.coloradomesh.wearmesh.ui.HomeRows
 import org.coloradomesh.wearmesh.ui.HomeScreen
 import org.coloradomesh.wearmesh.ui.MessageScreen
+import org.coloradomesh.wearmesh.ui.NewMessage
+import org.coloradomesh.wearmesh.ui.NewMessageScreen
 import org.coloradomesh.wearmesh.ui.NotificationsScreen
 import org.coloradomesh.wearmesh.ui.NotifyRow
 import org.coloradomesh.wearmesh.ui.QuickReplies
@@ -408,6 +411,7 @@ class MainActivity : ComponentActivity() {
                     // Once, after Live has first connected.
                     offerCheckIn = mode == Mode.Kind.LIVE && !offerAnswered && link.running && link.link == "Connected",
                     onCheckNow = { withPermissions { CheckIn.now(this@MainActivity) } },
+                    onNewMessage = { nav.navigate(NEW_MESSAGE) },
                     onOfferAnswered = { switch -> answerOffer(switch) },
                     onOpen = { row -> openConversation(row.conversation, row.title) },
                     onRadios = { nav.navigate(RADIOS) },
@@ -421,6 +425,11 @@ class MainActivity : ComponentActivity() {
                 val messages by remember(radioInUse, key) { dao.messagesFlow(radioInUse, key) }.collectAsStateWithLifecycle(emptyList())
                 val channels by remember(radioInUse) { dao.channelsFlow(radioInUse) }.collectAsStateWithLifecycle(emptyList())
                 val kind = NotifyRules.kindOf(key, channels.firstOrNull { "c:${it.slot}" == key }?.kind)
+                // The contact, for a direct conversation, wrapped in a list so "not read yet" (empty)
+                // differs from "no such contact" (a null in it): no warning flashes up while it loads.
+                val contact by remember(radioInUse, key) {
+                    dao.contactFlow(radioInUse, key.removePrefix("d:")).map { listOf(it) }
+                }.collectAsStateWithLifecycle(emptyList())
                 // While this conversation is on screen it does not notify, and its notification goes.
                 LifecycleResumeEffect(radioInUse, key) {
                     Notifier.onScreen(this@MainActivity, radioInUse, key)
@@ -432,6 +441,7 @@ class MainActivity : ComponentActivity() {
                     selfName = remember { Prefs.of(this@MainActivity).getString(Prefs.SELF_NAME, null) },
                     now = now,
                     notifyOn = NotifyRules.isOn(key, kind, choices),
+                    favouriteWarning = if (contact.isEmpty()) null else NewMessage.favouriteWarning(key, contact.first()),
                     onSeen = { Storage.later { dao.markRead(radioInUse, key) } },
                     onToggleNotify = {
                         Notifier.setChoice(this@MainActivity, radioInUse, key, kind, !NotifyRules.isOn(key, kind, choices))
@@ -483,6 +493,18 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                     )
+                }
+            }
+
+            composable(NEW_MESSAGE) {
+                val favourites by remember(radioInUse) { dao.favouriteCompanionsFlow(radioInUse) }.collectAsStateWithLifecycle(emptyList())
+                val recent by remember(radioInUse) { dao.recentCompanionsFlow(radioInUse, NewMessage.RECENT) }
+                    .collectAsStateWithLifecycle(emptyList())
+                val channels by remember(radioInUse) { dao.channelsFlow(radioInUse) }.collectAsStateWithLifecycle(emptyList())
+                NewMessageScreen(picks = NewMessage.build(favourites, recent, channels, now)) { pick ->
+                    // Its conversation, empty or not, with Reply under any history there is.
+                    nav.popBackStack()
+                    openConversation(pick.conversation, pick.title)
                 }
             }
 
@@ -673,6 +695,7 @@ class MainActivity : ComponentActivity() {
         const val MESSAGE = "message"
         const val QUICK_REPLIES = "quick-replies"
         const val QUICK_REPLY = "quick-reply"
+        const val NEW_MESSAGE = "new-message"
 
         /** No sync on opening the app if the last one finished this recently. */
         const val OPEN_SYNC_GAP_MS = 2 * 60_000L

@@ -39,6 +39,8 @@ fun ConversationScreen(
     notifyOn: Boolean,
     onSeen: () -> Unit,
     onToggleNotify: () -> Unit,
+    /** For a direct conversation whose contact is not a favourite on the radio (step 4). */
+    favouriteWarning: String?,
     onReply: () -> Unit,
     /** A tapped message: to reply to its sender, or retry one of the watch's that failed. */
     onOpenMessage: (MessageRow) -> Unit,
@@ -58,6 +60,7 @@ fun ConversationScreen(
         if (messages.isEmpty()) item { Note("No messages yet") }
         items(messages, key = { it.id }) { message -> MessageItem(message, selfName, now) { onOpenMessage(message) } }
         item { WideChip("Reply") { onReply() } }
+        favouriteWarning?.let { item { Note(it) } }
         item {
             WideChip(
                 label = if (notifyOn) "Notifications: on" else "Notifications: off",
