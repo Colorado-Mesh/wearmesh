@@ -34,8 +34,9 @@ class RoomMessageStore(private val db: WearMeshDatabase, override val address: S
 
     override fun setContactsSince(since: Long) = dao.setContactsSince(address, since)
 
-    override fun saveChannels(channels: List<Channel>, unanswered: Set<Int>) = db.runInTransaction(
-        Runnable {
+    override fun saveChannels(channels: List<Channel>, unanswered: Set<Int>): Int = db.runInTransaction(
+        Callable {
+            var dropped = 0
             val now = channels.associateBy { it.index }
             val kept = ArrayList<ChannelRow>()
             for (old in dao.channels(address)) {
@@ -44,10 +45,15 @@ class RoomMessageStore(private val db: WearMeshDatabase, override val address: S
                     continue
                 }
                 val same = now[old.slot]
-                if (same == null || same.name != old.name) dao.clearConversation(address, Conversations.channel(old.slot))
+                if (same == null || same.name != old.name) {
+                    val conversation = Conversations.channel(old.slot)
+                    dropped += dao.pendingCount(address, conversation)
+                    dao.clearConversation(address, conversation)
+                }
             }
             dao.clearChannels(address)
             dao.insertChannels(channels.map { ChannelRow(address, it.index, it.name, it.kind.name) } + kept)
+            dropped
         },
     )
 
@@ -74,6 +80,30 @@ class RoomMessageStore(private val db: WearMeshDatabase, override val address: S
             StoreCounts(dao.messageCount(address), dao.conversationCount(address), dao.contactCount(address), dao.channelCount(address))
         },
     )
+
+    override fun addOutgoing(conversation: String, sender: String, body: String, at: Long): Long = db.runInTransaction(
+        Callable {
+            val row = MessageRow(
+                radio = address,
+                conversation = conversation,
+                sender = sender,
+                body = body,
+                sentAt = at / 1000,
+                receivedAt = at,
+                read = true,
+                outgoing = true,
+                status = OutgoingStatus.SENDING.name,
+            )
+            val id = dao.insertMessage(row)
+            if (id != -1L) dao.trim(address, conversation, MessageStore.KEEP_PER_CONVERSATION)
+            id
+        },
+    )
+
+    override fun pendingOutgoing(): List<OutgoingMessage> =
+        dao.pendingOutgoing(address).map { OutgoingMessage(it.id, it.conversation, it.body, it.receivedAt) }
+
+    override fun setOutgoingStatus(id: Long, status: OutgoingStatus) = dao.setStatus(address, id, status.name)
 
     private companion object {
         const val PREFIX_CHARS = 12

@@ -48,6 +48,7 @@ import org.coloradomesh.wearmesh.ui.NotificationsScreen
 import org.coloradomesh.wearmesh.ui.NotifyRow
 import org.coloradomesh.wearmesh.ui.RadioScreen
 import org.coloradomesh.wearmesh.ui.RadiosScreen
+import org.coloradomesh.wearmesh.ui.SentStatus
 import org.coloradomesh.wearmesh.ui.SettingsScreen
 import org.coloradomesh.wearmesh.ui.SettingsState
 import org.coloradomesh.wearmesh.ui.WelcomeScreen
@@ -414,6 +415,11 @@ class MainActivity : ComponentActivity() {
                     onSeen = { Storage.later { dao.markRead(radioInUse, key) } },
                     onToggleNotify = {
                         Notifier.setChoice(this@MainActivity, radioInUse, key, kind, !NotifyRules.isOn(key, kind, choices))
+                    },
+                    onSendTest = {
+                        // The time makes each test its own message, so a second one is not taken for a double tap.
+                        val at = java.time.LocalTime.now().withNano(0)
+                        withPermissions { Outbox.send(this@MainActivity, key, "${SentStatus.TEST_TEXT} $at") }
                     },
                 )
             }

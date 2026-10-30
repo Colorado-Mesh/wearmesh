@@ -66,8 +66,12 @@ data class MessageRow(
     val body: String,
     @ColumnInfo(name = "sent_at") val sentAt: Long,
     @ColumnInfo(name = "received_at") val receivedAt: Long,
-    /** For the screens and notifications (M2 steps 3 and 4). */
+    /** For the screens and notifications (M2 steps 3 and 4). A message the watch sent is read. */
     val read: Boolean = false,
+    /** True for a message this watch sent (M3, schema version 3). */
+    @ColumnInfo(defaultValue = "0") val outgoing: Boolean = false,
+    /** For a message this watch sent, an [OutgoingStatus] name; null for one received. */
+    val status: String? = null,
 )
 
 /** A conversation's newest message and how many of its messages are unread, for Home. */
@@ -79,4 +83,6 @@ data class ConversationLast(
     val unread: Int,
     /** For a direct message, the stored contact whose key starts with the sender's prefix. */
     val contactName: String?,
+    /** Whether the newest message is one this watch sent. */
+    val outgoing: Boolean = false,
 )

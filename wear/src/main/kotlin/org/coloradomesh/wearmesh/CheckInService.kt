@@ -21,11 +21,16 @@ import kotlinx.coroutines.launch
  *
  * Being in the foreground keeps the process from being frozen or killed mid-check-in, which a
  * background job was not protected from in the first overnight test. The check-in holds its own
- * wake lock (see [CheckInRun]). A second start while one is running is ignored.
+ * wake lock (see [CheckInRun]). A second start while one is running is ignored, except one to
+ * send (M3): a message written after the running check-in read the outbox gets a run of its own
+ * once that one ends.
  */
 class CheckInService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var running: Job? = null
+
+    /** A send was asked for while a check-in was running. */
+    private var sendAgain = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -54,10 +59,18 @@ class CheckInService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (running?.isActive == true) return START_NOT_STICKY
+        if (running?.isActive == true) {
+            if (why == CheckIn.TO_SEND) sendAgain = true
+            return START_NOT_STICKY
+        }
         running = scope.launch {
             try {
                 CheckInRun.run(applicationContext, why, fullRead = why == CheckIn.FULL_READ_ASKED_FOR)
+                // On the main thread, like onStartCommand, so the flag needs no lock.
+                while (sendAgain) {
+                    sendAgain = false
+                    CheckInRun.run(applicationContext, CheckIn.TO_SEND)
+                }
             } finally {
                 ServiceCompat.stopForeground(this@CheckInService, ServiceCompat.STOP_FOREGROUND_REMOVE)
                 stopSelf()

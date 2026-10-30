@@ -26,8 +26,9 @@ class SyncRecorderTest {
         }
         override fun dropContactsNotSeenSince(readAt: Long) { calls.add("dropContactsNotSeenSince $readAt") }
         override fun setContactsSince(since: Long) { calls.add("setContactsSince $since") }
-        override fun saveChannels(channels: List<Channel>, unanswered: Set<Int>) {
+        override fun saveChannels(channels: List<Channel>, unanswered: Set<Int>): Int {
             calls.add("saveChannels ${channels.map { it.name }}" + if (unanswered.isEmpty()) "" else " keeping $unanswered")
+            return 0
         }
         override fun markFullRead(at: Long) { calls.add("markFullRead $at") }
         override fun addMessage(message: IncomingMessage): Boolean {
@@ -41,6 +42,9 @@ class SyncRecorderTest {
             return true
         }
         override fun counts() = StoreCounts(messages.size, 0, 0, 0)
+        override fun addOutgoing(conversation: String, sender: String, body: String, at: Long) = -1L
+        override fun pendingOutgoing() = emptyList<OutgoingMessage>()
+        override fun setOutgoingStatus(id: Long, status: OutgoingStatus) {}
     }
 
     private val store = FakeStore()

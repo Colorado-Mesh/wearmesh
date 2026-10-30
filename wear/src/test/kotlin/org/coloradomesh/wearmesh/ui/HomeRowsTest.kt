@@ -50,6 +50,7 @@ class HomeRowsTest {
     fun previewsWithAndWithoutASender() {
         assertEquals("Ann: hi", HomeRows.preview(last("c:0", at = 1)))
         assertEquals("hi", HomeRows.preview(last("d:a1b2c3d4e5f6", at = 1, sender = "")))
+        assertEquals("You: hi", HomeRows.preview(last("c:0", at = 1, sender = "W0RMT").copy(outgoing = true)))
     }
 
     @Test
