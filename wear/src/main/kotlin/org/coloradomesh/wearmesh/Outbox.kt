@@ -42,9 +42,10 @@ object Outbox {
         val radio = Prefs.of(app).getString(Prefs.RADIO_ADDRESS, null) ?: return
         val store = Storage.store(app, radio)
         val at = System.currentTimeMillis()
-        Notifier.dismissFailure(app, radio, id)
         Storage.later {
             if (store.retryOutgoing(id, at)) {
+                // Only once it is waiting again: if the write fails, the notification stays.
+                Notifier.dismissFailure(app, radio, id)
                 startSending(app)
             } else {
                 SpikeLog.log("Outbox: that message is no longer failed; not sent again")

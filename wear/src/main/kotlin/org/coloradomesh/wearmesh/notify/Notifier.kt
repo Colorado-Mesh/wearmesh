@@ -40,7 +40,6 @@ object Notifier {
     const val EXTRA_CONVERSATION = "org.coloradomesh.wearmesh.CONVERSATION"
     const val EXTRA_TITLE = "org.coloradomesh.wearmesh.TITLE"
     const val EXTRA_MESSAGE_ID = "org.coloradomesh.wearmesh.MESSAGE_ID"
-    const val EXTRA_NOTIFICATION_ID = "org.coloradomesh.wearmesh.NOTIFICATION_ID"
 
     /** The reply typed, spoken or chosen in a notification's Reply. */
     const val KEY_REPLY = "reply"
@@ -205,7 +204,8 @@ object Notifier {
     fun notSent(context: Context, radio: String, conversation: String, body: String, reason: String, retryId: Long? = null) {
         if (!allowed(context)) return
         val title = titleFor(context, radio, conversation)
-        val id = idFor(radio, "failed|${retryId ?: conversation}")
+        // One per failed message, or per rejected reply's text, so a second does not replace the first.
+        val id = idFor(radio, if (retryId != null) "failed|$retryId" else "rejected|$conversation|$body")
         val builder = NotificationCompat.Builder(context, CHANNEL_DIRECT)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Not sent to $title")
@@ -219,7 +219,6 @@ object Notifier {
                 .setAction(MessageActionReceiver.ACTION_RETRY)
                 .putExtra(EXTRA_RADIO, radio)
                 .putExtra(EXTRA_MESSAGE_ID, retryId)
-                .putExtra(EXTRA_NOTIFICATION_ID, id)
             val pending = PendingIntent.getBroadcast(context, id, retry, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
             builder.addAction(NotificationCompat.Action.Builder(R.drawable.ic_notification, "Retry", pending).build())
         }
@@ -235,11 +234,9 @@ object Notifier {
     /** Takes a conversation's notification down, as when it is replied to or marked read from it. */
     fun dismiss(context: Context, radio: String, conversation: String) = cancel(context, radio, conversation)
 
-    /** Takes down a notification by its id, as a failure's once Retry is tapped. */
-    fun dismiss(context: Context, id: Int) = context.getSystemService(NotificationManager::class.java).cancel(id)
-
-    /** Takes down the failure notification for the message [id], as when it is retried in the app. */
-    fun dismissFailure(context: Context, radio: String, id: Long) = dismiss(context, idFor(radio, "failed|$id"))
+    /** Takes down the failure notification for the message [id], once it is waiting to send again. */
+    fun dismissFailure(context: Context, radio: String, id: Long) =
+        context.getSystemService(NotificationManager::class.java).cancel(idFor(radio, "failed|$id"))
 
     private fun replyAction(context: Context, radio: String, conversation: String, title: String): NotificationCompat.Action {
         val intent = Intent(context, MessageActionReceiver::class.java)

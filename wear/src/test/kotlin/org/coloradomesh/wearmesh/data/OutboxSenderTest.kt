@@ -289,18 +289,23 @@ class OutboxSenderTest {
 
     @Test
     fun failuresAreToldOfButNotUnconfirmedOnes() {
-        val told = ArrayList<OutgoingStatus>()
-        val failing = OutboxSender(store, writer, radio, { log.add(it) }, { now }, onFailed = { _, status, _ -> told.add(status) })
+        val told = ArrayList<Triple<Long, String, OutgoingStatus>>()
+        val failing = OutboxSender(store, writer, radio, { log.add(it) }, { now }, onFailed = { message, status, _ ->
+            told.add(Triple(message.id, message.body, status))
+        })
         write("d:a1b2c3d4e5f6", "Copy")
-        write("d:0000000000ff", "Yes")
-        write("c:0", "late", at = now - OutboxSender.STALE_MS - 1)
+        val refused = write("d:0000000000ff", "Yes")
+        val stale = write("c:0", "late", at = now - OutboxSender.STALE_MS - 1)
         failing.sendPending()
         runWrites()
         failing.onDirectResult(100, DirectOutcome.UNCONFIRMED)
         failing.onDirectRefused(101, CompanionClient.ERROR_NOT_FOUND)
         failing.onDirectResult(101, DirectOutcome.REFUSED)
         runWrites()
-        assertEquals(setOf(OutgoingStatus.FAILED, OutgoingStatus.NO_CONTACT), told.toSet())
+        assertEquals(
+            setOf(Triple(stale, "late", OutgoingStatus.FAILED), Triple(refused, "Yes", OutgoingStatus.NO_CONTACT)),
+            told.toSet(),
+        )
         assertEquals(2, told.size)
     }
 }

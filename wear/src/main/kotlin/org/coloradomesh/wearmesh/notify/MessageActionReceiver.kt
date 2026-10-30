@@ -19,7 +19,8 @@ import org.coloradomesh.wearmesh.ui.Drafts
  * the conversation read and takes its notification down.
  *
  * Sending starts the Live link's send or a Check-in connection, which Android allows from here:
- * a tap on a notification lets the app start a foreground service for a short while.
+ * a tap on a notification lets the app start a foreground service for a short while. The storage
+ * writes each action queues finish before the broadcast does.
  */
 class MessageActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -29,16 +30,25 @@ class MessageActionReceiver : BroadcastReceiver() {
             SpikeLog.log("Notification action for a radio no longer in use; ignored")
             return
         }
-        when (intent.action) {
-            ACTION_REPLY -> reply(context, radio, intent)
-            ACTION_MARK_READ -> markRead(context, radio, intent.getStringExtra(Notifier.EXTRA_CONVERSATION) ?: return)
-            ACTION_RETRY -> {
-                val id = intent.getLongExtra(Notifier.EXTRA_MESSAGE_ID, -1)
-                if (id < 0) return
-                Notifier.dismiss(context, intent.getIntExtra(Notifier.EXTRA_NOTIFICATION_ID, 0))
-                SpikeLog.log("Notification: Retry")
-                Outbox.retry(context, id)
+        // Each action queues writes on the storage thread. Holding the broadcast open until they are
+        // done keeps Android from ending the process first, when nothing else of the app is running.
+        val pending = goAsync()
+        try {
+            when (intent.action) {
+                ACTION_REPLY -> reply(context, radio, intent)
+                ACTION_MARK_READ -> intent.getStringExtra(Notifier.EXTRA_CONVERSATION)?.let { markRead(context, radio, it) }
+                ACTION_RETRY -> {
+                    val id = intent.getLongExtra(Notifier.EXTRA_MESSAGE_ID, -1)
+                    if (id >= 0) {
+                        SpikeLog.log("Notification: Retry")
+                        // Takes the notification down once the message is waiting again.
+                        Outbox.retry(context, id)
+                    }
+                }
             }
+        } finally {
+            // Queued after everything above, on the same single thread, so it runs last.
+            Storage.later { pending.finish() }
         }
     }
 

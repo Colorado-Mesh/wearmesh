@@ -8,7 +8,7 @@ Replying without opening the app, as decided for M3 (29 October 2026): **Reply**
 - **Sending works as in the app:** over Live's link, or in Check-in mode over a connection opened at once, which Android allows for a short while after a tap on a notification.
 - **Replying marks the conversation read** and takes its notification down; **Mark read** does the same without replying.
 - **A reply over the byte limit** is not sent. A notification says so ("Not sent to #testing: Too long by 12 bytes") with the text, since the reply screen has no room to show and edit it; tapping it opens the conversation.
-- **A message that fails notifies** (decided for M3): "Not sent to Ann", with the reason ("Your radio does not have this contact", or why the radio refused it, or that it waited 30 minutes) and **Retry**. Tapping Retry, there or on the message in the app, takes the notification down and sends it again. A direct message that is only **Not confirmed** (it may have arrived) does not notify.
+- **A message that fails notifies** (decided for M3): "Not sent to Ann", with the reason ("Your radio does not have this contact", or why the radio refused it, or that it waited 30 minutes) and **Retry**. Tapping Retry, there or on the message in the app, sends it again, and takes the notification down once the message is waiting to send. Each failed message and each rejected reply has a notification of its own, so a second does not replace the first. A direct message that is only **Not confirmed** (it may have arrived) does not notify.
 
 ## Testing on the watch
 

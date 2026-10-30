@@ -231,6 +231,8 @@ class OutboxSender(
                 store.setOutgoingStatus(message.id, status)
             } catch (e: Exception) {
                 log("Outbox: could not record a message's status (${e.message})")
+                // Not recorded as failed, so Retry could not find it: no notification offering it.
+                return@execute
             }
             if (status == OutgoingStatus.FAILED || status == OutgoingStatus.NO_CONTACT) {
                 try {
