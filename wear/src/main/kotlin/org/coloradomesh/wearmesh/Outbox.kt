@@ -2,6 +2,7 @@ package org.coloradomesh.wearmesh
 
 import android.content.Context
 import org.coloradomesh.wearmesh.data.Storage
+import org.coloradomesh.wearmesh.notify.Notifier
 
 /**
  * Where the screens send from (M3). A message is stored in its conversation as waiting, then
@@ -43,6 +44,8 @@ object Outbox {
         val at = System.currentTimeMillis()
         Storage.later {
             if (store.retryOutgoing(id, at)) {
+                // Only once it is waiting again: if the write fails, the notification stays.
+                Notifier.dismissFailure(app, radio, id)
                 startSending(app)
             } else {
                 SpikeLog.log("Outbox: that message is no longer failed; not sent again")

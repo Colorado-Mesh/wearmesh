@@ -176,7 +176,7 @@ Four milestones, each ending in a go/no-go check; the first is a throwaway spike
 4. **M3 — Messaging.** Reply screen with quick replies, dictation, keyboard; direct messages to known contacts; Live mode. The Tile and complication move to M4 (decided 29 October 2026).
    - Exit: field test with the Colorado mesh, messages round-trip with a phone client on another radio.
    - Decided (29 October 2026): quick replies OK, Yes, No, On my way, Copy, Call me, 73, editable on the watch; replies open in dictation with the keyboard one tap away; quick replies send at once, composed text is previewed first; in Check-in a message is sent at once, and a direct message's connection is held for all 3 tries; Reply on every message notification; channel replies start with `@[name]`; a new message picks from favourites, then recent contacts, then channels; a failed message stays with Retry and notifies; the watch sets the radio's clock when it is more than a minute off.
-   - Steps: (1) outbox and sending, [M3-step1-sending.md](M3-step1-sending.md); (2) compose, [M3-step2-compose.md](M3-step2-compose.md); (3) notification reply; (4) new message; (5) field test.
+   - Steps: (1) outbox and sending, [M3-step1-sending.md](M3-step1-sending.md); (2) compose, [M3-step2-compose.md](M3-step2-compose.md); (3) notification reply, [M3-step3-notification-reply.md](M3-step3-notification-reply.md); (4) new message; (5) field test.
 5. **M4 — Tile and complication.** Unread count, Check now and the newest message on a Tile; an unread-count complication.
 
 **M0 results (23 October 2026): complete**

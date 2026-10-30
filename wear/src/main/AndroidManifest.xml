@@ -63,6 +63,11 @@
             android:name=".CheckInAlarmReceiver"
             android:exported="false" />
 
+        <!-- Reply, Mark read and Retry on message notifications. -->
+        <receiver
+            android:name=".notify.MessageActionReceiver"
+            android:exported="false" />
+
         <!-- Ends a Live reconnect pause, also in Doze. -->
         <receiver
             android:name=".LiveReconnectReceiver"
