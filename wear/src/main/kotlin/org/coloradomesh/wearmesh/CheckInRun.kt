@@ -26,6 +26,7 @@ import org.coloradomesh.wearmesh.data.OutboxSender
 import org.coloradomesh.wearmesh.data.Storage
 import org.coloradomesh.wearmesh.data.SyncPlan
 import org.coloradomesh.wearmesh.data.SyncRecorder
+import org.coloradomesh.wearmesh.glance.Glances
 import org.coloradomesh.wearmesh.notify.Notifier
 import java.util.Collections
 import java.util.concurrent.atomic.AtomicBoolean
@@ -140,6 +141,8 @@ object CheckInRun {
             problem = connectAndCollect(app, address, fullRead, started, timeLimitMs, sendLimitMs)
         } finally {
             SyncStatus.finished(app, problem)
+            // After the sync time is saved, so "Synced … ago" counts from this one.
+            Glances.refresh(app)
         }
     }
 

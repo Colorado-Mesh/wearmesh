@@ -90,7 +90,8 @@ object Notifier {
         Prefs.of(context).edit().remove(Prefs.NOTIFY_CHOICES + radio).apply()
     }
 
-    private fun readChoices(context: Context, radio: String) =
+    /** A radio's notification choices as saved; also for the glance (M4). */
+    fun readChoices(context: Context, radio: String) =
         NotifyRules.parseChoices(Prefs.of(context).getString(Prefs.NOTIFY_CHOICES + radio, null))
 
     /** The conversation now on screen, or null when none is; opening one also clears its notification. */
