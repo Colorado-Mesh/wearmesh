@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
+import androidx.core.app.RemoteInput
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,11 +19,17 @@ import org.coloradomesh.wearmesh.Prefs
 import org.coloradomesh.wearmesh.R
 import org.coloradomesh.wearmesh.SpikeLog
 import org.coloradomesh.wearmesh.data.IncomingMessage
+import org.coloradomesh.wearmesh.data.OutgoingMessage
+import org.coloradomesh.wearmesh.data.OutgoingStatus
 import org.coloradomesh.wearmesh.data.Storage
+import org.coloradomesh.wearmesh.ui.QuickReplies
 
 /**
  * Message notifications (M2 step 4): one per conversation, showing its newest unread messages,
- * grouped under one summary that alone buzzes. Which messages notify is [NotifyRules]; how often
+ * grouped under one summary that alone buzzes. Each has Reply, offering the quick replies with
+ * voice and keyboard for anything else, and Mark read (M3 step 3, decided for M3: Reply on every
+ * message notification). A message of the watch's that fails gets its own notification, with
+ * Retry ([failed]). Which messages notify is [NotifyRules]; how often
  * a conversation buzzes is [AlertGate]. Direct messages and channels have their own Android
  * notification channels, so the watch's settings can give them different sounds and vibration.
  */
@@ -32,6 +39,11 @@ object Notifier {
     const val EXTRA_RADIO = "org.coloradomesh.wearmesh.RADIO"
     const val EXTRA_CONVERSATION = "org.coloradomesh.wearmesh.CONVERSATION"
     const val EXTRA_TITLE = "org.coloradomesh.wearmesh.TITLE"
+    const val EXTRA_MESSAGE_ID = "org.coloradomesh.wearmesh.MESSAGE_ID"
+    const val EXTRA_NOTIFICATION_ID = "org.coloradomesh.wearmesh.NOTIFICATION_ID"
+
+    /** The reply typed, spoken or chosen in a notification's Reply. */
+    const val KEY_REPLY = "reply"
 
     private const val GROUP = "org.coloradomesh.wearmesh.MESSAGES"
 
@@ -119,11 +131,7 @@ object Notifier {
             if (arrived.none { NotifyRules.shouldNotify(on, it.body, self, open, backlog = false) }) continue
             val unread = dao.unreadMessages(radio, conversation, SHOWN_MESSAGES).reversed()
             if (unread.isEmpty()) continue
-            val title = when {
-                channel != null -> channel.name
-                kind == NotifyRules.Kind.DIRECT -> dao.contactName(radio, conversation.removePrefix("d:")) ?: conversation.removePrefix("d:")
-                else -> "Channel ${conversation.removePrefix("c:")}"
-            }
+            val title = titleFor(context, radio, conversation)
             val style = NotificationCompat.MessagingStyle(Person.Builder().setName("You").build())
                 .setConversationTitle(title)
                 .setGroupConversation(kind != NotifyRules.Kind.DIRECT)
@@ -141,6 +149,8 @@ object Notifier {
                 .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY)
                 .setAutoCancel(true)
                 .setContentIntent(openIntent(context, radio, conversation, title))
+                .addAction(replyAction(context, radio, conversation, title))
+                .addAction(markReadAction(context, radio, conversation))
                 .build()
             if (gate.shouldAlert(conversation, now)) buzz = true
             if (kind == NotifyRules.Kind.DIRECT) anyDirect = true
@@ -163,6 +173,114 @@ object Notifier {
             .setContentIntent(homeIntent(context))
             .build()
         notify(context, SUMMARY_ID, summary)
+    }
+
+    /**
+     * A conversation's name for a notification: the channel's, the contact's, or the key prefix.
+     * Call on the storage thread: it reads the store.
+     */
+    fun titleFor(context: Context, radio: String, conversation: String): String {
+        val dao = Storage.dao(context)
+        return when {
+            conversation.startsWith("d:") -> dao.contactName(radio, conversation.removePrefix("d:")) ?: conversation.removePrefix("d:")
+            else -> {
+                val slot = conversation.removePrefix("c:").toIntOrNull()
+                dao.channels(radio).firstOrNull { it.slot == slot }?.name ?: "Channel ${conversation.removePrefix("c:")}"
+            }
+        }
+    }
+
+    /**
+     * A message of the watch's that failed (decided for M3: a failure notifies), with Retry when
+     * it can be tried again. Call on the storage thread.
+     */
+    fun failed(context: Context, radio: String, message: OutgoingMessage, status: OutgoingStatus, why: String?) {
+        notSent(context, radio, message.conversation, message.body, reason(status, why), retryId = message.id)
+    }
+
+    /**
+     * A reply from a notification that could not be sent, such as one over the byte limit, or one
+     * that failed ([retryId] set). Call on the storage thread.
+     */
+    fun notSent(context: Context, radio: String, conversation: String, body: String, reason: String, retryId: Long? = null) {
+        if (!allowed(context)) return
+        val title = titleFor(context, radio, conversation)
+        val id = idFor(radio, "failed|${retryId ?: conversation}")
+        val builder = NotificationCompat.Builder(context, CHANNEL_DIRECT)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("Not sent to $title")
+            .setContentText(reason)
+            .setStyle(NotificationCompat.BigTextStyle().bigText("$reason\n\n$body"))
+            .setCategory(NotificationCompat.CATEGORY_ERROR)
+            .setAutoCancel(true)
+            .setContentIntent(openIntent(context, radio, conversation, title))
+        if (retryId != null) {
+            val retry = Intent(context, MessageActionReceiver::class.java)
+                .setAction(MessageActionReceiver.ACTION_RETRY)
+                .putExtra(EXTRA_RADIO, radio)
+                .putExtra(EXTRA_MESSAGE_ID, retryId)
+                .putExtra(EXTRA_NOTIFICATION_ID, id)
+            val pending = PendingIntent.getBroadcast(context, id, retry, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+            builder.addAction(NotificationCompat.Action.Builder(R.drawable.ic_notification, "Retry", pending).build())
+        }
+        notify(context, id, builder.build())
+        SpikeLog.log("Notified: not sent to $title ($reason)")
+    }
+
+    private fun reason(status: OutgoingStatus, why: String?): String = when (status) {
+        OutgoingStatus.NO_CONTACT -> "Your radio does not have this contact"
+        else -> why?.replaceFirstChar { it.uppercase() } ?: "The radio would not send it"
+    }
+
+    /** Takes a conversation's notification down, as when it is replied to or marked read from it. */
+    fun dismiss(context: Context, radio: String, conversation: String) = cancel(context, radio, conversation)
+
+    /** Takes down a notification by its id, as a failure's once Retry is tapped. */
+    fun dismiss(context: Context, id: Int) = context.getSystemService(NotificationManager::class.java).cancel(id)
+
+    /** Takes down the failure notification for the message [id], as when it is retried in the app. */
+    fun dismissFailure(context: Context, radio: String, id: Long) = dismiss(context, idFor(radio, "failed|$id"))
+
+    private fun replyAction(context: Context, radio: String, conversation: String, title: String): NotificationCompat.Action {
+        val intent = Intent(context, MessageActionReceiver::class.java)
+            .setAction(MessageActionReceiver.ACTION_REPLY)
+            .putExtra(EXTRA_RADIO, radio)
+            .putExtra(EXTRA_CONVERSATION, conversation)
+        // Mutable: the system adds the reply to it.
+        val pending = PendingIntent.getBroadcast(
+            context,
+            idFor(radio, "reply|$conversation"),
+            intent,
+            PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val replies = QuickReplies.parse(Prefs.of(context).getString(Prefs.QUICK_REPLIES, null))
+        val input = RemoteInput.Builder(KEY_REPLY)
+            .setLabel("Reply to $title")
+            .setChoices(replies.toTypedArray<CharSequence>())
+            .setAllowFreeFormInput(true)
+            .build()
+        return NotificationCompat.Action.Builder(R.drawable.ic_notification, "Reply", pending)
+            .addRemoteInput(input)
+            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
+            .setShowsUserInterface(false)
+            .build()
+    }
+
+    private fun markReadAction(context: Context, radio: String, conversation: String): NotificationCompat.Action {
+        val intent = Intent(context, MessageActionReceiver::class.java)
+            .setAction(MessageActionReceiver.ACTION_MARK_READ)
+            .putExtra(EXTRA_RADIO, radio)
+            .putExtra(EXTRA_CONVERSATION, conversation)
+        val pending = PendingIntent.getBroadcast(
+            context,
+            idFor(radio, "read|$conversation"),
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        return NotificationCompat.Action.Builder(R.drawable.ic_notification, "Mark read", pending)
+            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_MARK_AS_READ)
+            .setShowsUserInterface(false)
+            .build()
     }
 
     private fun allowed(context: Context): Boolean =

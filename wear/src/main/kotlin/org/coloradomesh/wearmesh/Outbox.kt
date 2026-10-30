@@ -2,6 +2,7 @@ package org.coloradomesh.wearmesh
 
 import android.content.Context
 import org.coloradomesh.wearmesh.data.Storage
+import org.coloradomesh.wearmesh.notify.Notifier
 
 /**
  * Where the screens send from (M3). A message is stored in its conversation as waiting, then
@@ -41,6 +42,7 @@ object Outbox {
         val radio = Prefs.of(app).getString(Prefs.RADIO_ADDRESS, null) ?: return
         val store = Storage.store(app, radio)
         val at = System.currentTimeMillis()
+        Notifier.dismissFailure(app, radio, id)
         Storage.later {
             if (store.retryOutgoing(id, at)) {
                 startSending(app)

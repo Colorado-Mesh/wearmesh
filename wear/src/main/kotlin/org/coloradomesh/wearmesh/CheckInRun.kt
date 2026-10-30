@@ -193,6 +193,7 @@ object CheckInRun {
                 override fun sendDirectText(publicKeyHex: String, text: String): Long? = link.get()?.sendDirectText(publicKeyHex, text)
             },
             { SpikeLog.log("Check-in: $it") },
+            onFailed = { message, status, why -> Notifier.failed(app, address, message, status, why) },
         )
         val sendsDone = CompletableDeferred<Unit>()
 

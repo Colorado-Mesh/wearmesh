@@ -30,6 +30,8 @@ class OutboxSender(
     private val radio: Port,
     private val log: (String) -> Unit,
     private val clock: () -> Long = System::currentTimeMillis,
+    /** A message that ended failed (not merely unconfirmed), on [writer] once recorded; it notifies. */
+    private val onFailed: (OutgoingMessage, OutgoingStatus, String?) -> Unit = { _, _, _ -> },
 ) {
     /** What this needs of the connection: the shared code's two send calls. */
     interface Port {
@@ -229,6 +231,13 @@ class OutboxSender(
                 store.setOutgoingStatus(message.id, status)
             } catch (e: Exception) {
                 log("Outbox: could not record a message's status (${e.message})")
+            }
+            if (status == OutgoingStatus.FAILED || status == OutgoingStatus.NO_CONTACT) {
+                try {
+                    onFailed(message, status, why)
+                } catch (e: Exception) {
+                    log("Outbox: could not tell of a failed message (${e.message})")
+                }
             }
         }
     }

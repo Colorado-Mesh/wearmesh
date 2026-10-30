@@ -286,4 +286,21 @@ class OutboxSenderTest {
         runWrites()
         assertEquals(OutgoingStatus.SENT, store.statuses[id])
     }
+
+    @Test
+    fun failuresAreToldOfButNotUnconfirmedOnes() {
+        val told = ArrayList<OutgoingStatus>()
+        val failing = OutboxSender(store, writer, radio, { log.add(it) }, { now }, onFailed = { _, status, _ -> told.add(status) })
+        write("d:a1b2c3d4e5f6", "Copy")
+        write("d:0000000000ff", "Yes")
+        write("c:0", "late", at = now - OutboxSender.STALE_MS - 1)
+        failing.sendPending()
+        runWrites()
+        failing.onDirectResult(100, DirectOutcome.UNCONFIRMED)
+        failing.onDirectRefused(101, CompanionClient.ERROR_NOT_FOUND)
+        failing.onDirectResult(101, DirectOutcome.REFUSED)
+        runWrites()
+        assertEquals(setOf(OutgoingStatus.FAILED, OutgoingStatus.NO_CONTACT), told.toSet())
+        assertEquals(2, told.size)
+    }
 }

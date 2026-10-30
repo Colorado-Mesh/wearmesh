@@ -168,6 +168,7 @@ class SpikeService : Service() {
                 override fun sendDirectText(publicKeyHex: String, text: String): Long? = link.get()?.sendDirectText(publicKeyHex, text)
             },
             { SpikeLog.log(it) },
+            onFailed = { message, status, why -> Notifier.failed(this, target, message, status, why) },
         )
         outbox = sender
         // This link's own answers about sends go to its own sender; the rest to the shared listener.
