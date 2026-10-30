@@ -183,6 +183,8 @@ class SpikeService : Service() {
             override fun onSendResult(channelIndex: Int, text: String, accepted: Boolean) =
                 sender.onSendResult(channelIndex, text, accepted)
 
+            override fun onDirectRefused(id: Long, errorCode: Int?) = sender.onDirectRefused(id, errorCode)
+
             override fun onDirectResult(id: Long, publicKeyHex: String, text: String, outcome: DirectOutcome) =
                 sender.onDirectResult(id, outcome)
         }

@@ -69,7 +69,11 @@ class SyncRecorder(
         val sweep = plan.fullRead && !contactsSwept
         write {
             store.saveContacts(batch, readAt)
-            if (sweep) store.dropContactsNotSeenSince(readAt)
+            if (sweep) {
+                for (gone in store.dropContactsNotSeenSince(readAt)) log(Favourites.dropped(gone))
+                // A node heard advertising during the read can come twice; the store keeps one of each.
+                log(Favourites.summary(batch.distinctBy { it.publicKeyHex }.size, store.favouriteNames()))
+            }
             store.setContactsSince(lastModified)
         }
         if (sweep) {

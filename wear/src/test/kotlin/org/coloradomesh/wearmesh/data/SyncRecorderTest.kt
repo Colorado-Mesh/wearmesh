@@ -24,7 +24,13 @@ class SyncRecorderTest {
         override fun saveContacts(contacts: List<Contact>, readAt: Long) {
             calls.add("saveContacts ${contacts.map { it.name }} at $readAt")
         }
-        override fun dropContactsNotSeenSince(readAt: Long) { calls.add("dropContactsNotSeenSince $readAt") }
+        var dropped = emptyList<DroppedContact>()
+        var favourites = emptyList<String>()
+        override fun dropContactsNotSeenSince(readAt: Long): List<DroppedContact> {
+            calls.add("dropContactsNotSeenSince $readAt")
+            return dropped
+        }
+        override fun favouriteNames() = favourites
         override fun setContactsSince(since: Long) { calls.add("setContactsSince $since") }
         override fun saveChannels(channels: List<Channel>, unanswered: Set<Int>): Int {
             calls.add("saveChannels ${channels.map { it.name }}" + if (unanswered.isEmpty()) "" else " keeping $unanswered")
@@ -45,6 +51,8 @@ class SyncRecorderTest {
         override fun addOutgoing(conversation: String, sender: String, body: String, at: Long) = -1L
         override fun pendingOutgoing() = emptyList<OutgoingMessage>()
         override fun setOutgoingStatus(id: Long, status: OutgoingStatus) {}
+        override fun retryOutgoing(id: Long, at: Long) = false
+        override fun hasContact(prefix: String) = false
     }
 
     private val store = FakeStore()
@@ -217,7 +225,7 @@ class SyncRecorderTest {
         runWrites()
         assertTrue(store.calls.none { it.startsWith("markFullRead") })
         assertEquals("saveChannels [Public] keeping [7]", store.calls.last())
-        assertEquals("No answer for channel slot(s) 7; keeping what was stored for them", log.single())
+        assertTrue("No answer for channel slot(s) 7; keeping what was stored for them" in log)
     }
 
     @Test
@@ -270,5 +278,32 @@ class SyncRecorderTest {
         assertTrue(reported.isEmpty())
         runWrites()
         assertEquals(listOf("one", "two"), reported)
+    }
+
+    @Test
+    fun aFullReadLogsTheFavouritesAndAnyImportantContactDropped() {
+        store.favourites = listOf("Ann", "Bo")
+        store.dropped = listOf(DroppedContact("Cy", "d1a23c09f94d", favourite = false), DroppedContact("Di", "0000000000ff", favourite = true))
+        val recorder = recorder(full = true)
+        recorder.onContact(contact("Ann"))
+        recorder.onContactsRead(1_700_000_600)
+        runWrites()
+        assertEquals(
+            listOf(
+                "Contacts: the radio no longer lists Cy (d1a23c09f94d), a contact with a direct-message conversation",
+                "Contacts: the radio no longer lists Di (0000000000ff), a favourite",
+                "Contacts: 1 on the radio, 2 favourites (Ann, Bo)",
+            ),
+            log,
+        )
+    }
+
+    @Test
+    fun aBriefReadLogsNothingAboutFavourites() {
+        store.favourites = listOf("Ann")
+        val recorder = recorder(full = false)
+        recorder.onContactsRead(1_700_000_600)
+        runWrites()
+        assertTrue(log.isEmpty())
     }
 }

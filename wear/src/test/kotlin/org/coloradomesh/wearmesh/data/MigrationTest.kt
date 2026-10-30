@@ -9,6 +9,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -72,7 +73,7 @@ class MigrationTest {
             close()
         }
         val opened = Room.databaseBuilder(context, WearMeshDatabase::class.java, name)
-            .addMigrations(WearMeshDatabase.MIGRATION_2_3)
+            .addMigrations(WearMeshDatabase.MIGRATION_2_3, WearMeshDatabase.MIGRATION_3_4)
             .allowMainThreadQueries()
             .build()
         db = opened
@@ -85,5 +86,24 @@ class MigrationTest {
         val store = RoomMessageStore(opened, "F3:9E:35:24:99:76")
         val id = store.addOutgoing("c:0", "W0RMT", "OK", 1_800_000_060_000)
         assertEquals(listOf(OutgoingMessage(id, "c:0", "OK", 1_800_000_060_000)), store.pendingOutgoing())
+    }
+
+    @Test
+    fun version3KeepsItsContactsAndGainsTheFavouriteMark() {
+        createFromSchema(3).apply {
+            execSQL(
+                "INSERT INTO contacts (radio, public_key, prefix, name, type, last_advert, seen_at) " +
+                    "VALUES ('F3:9E:35:24:99:76', '${"a".repeat(64)}', 'aaaaaaaaaaaa', 'Ann', 1, 1700000000, 1800000000000)",
+            )
+            close()
+        }
+        val opened = Room.databaseBuilder(context, WearMeshDatabase::class.java, name)
+            .addMigrations(WearMeshDatabase.MIGRATION_2_3, WearMeshDatabase.MIGRATION_3_4)
+            .allowMainThreadQueries()
+            .build()
+        db = opened
+        val store = RoomMessageStore(opened, "F3:9E:35:24:99:76")
+        assertTrue(store.hasContact("aaaaaaaaaaaa"))
+        assertEquals(emptyList<String>(), store.favouriteNames())
     }
 }

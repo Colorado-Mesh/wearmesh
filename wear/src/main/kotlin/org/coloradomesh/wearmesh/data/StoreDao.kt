@@ -34,6 +34,19 @@ interface StoreDao {
     @Query("DELETE FROM contacts WHERE radio = :radio AND seen_at < :readAt")
     fun dropContactsNotSeenSince(radio: String, readAt: Long)
 
+    /**
+     * Contacts the radio did not list in the read at [readAt] that matter to the user: favourites,
+     * and nodes with a direct-message conversation. Read before they are dropped, for the log.
+     */
+    @Query(
+        "SELECT * FROM contacts c WHERE c.radio = :radio AND c.seen_at < :readAt AND (c.favourite = 1 OR EXISTS " +
+            "(SELECT 1 FROM messages m WHERE m.radio = c.radio AND m.conversation = 'd:' || c.prefix))",
+    )
+    fun notableNotSeenSince(radio: String, readAt: Long): List<ContactRow>
+
+    @Query("SELECT name FROM contacts WHERE radio = :radio AND favourite = 1 ORDER BY name")
+    fun favouriteNames(radio: String): List<String>
+
     @Query("SELECT * FROM channels WHERE radio = :radio ORDER BY slot")
     fun channels(radio: String): List<ChannelRow>
 
@@ -93,6 +106,19 @@ interface StoreDao {
 
     @Query("UPDATE messages SET status = :status WHERE radio = :radio AND id = :id AND outgoing = 1")
     fun setStatus(radio: String, id: Long, status: String)
+
+    /** A failed message waits to send again, as if written at [at]; returns the rows changed. */
+    @Query(
+        "UPDATE messages SET status = 'SENDING', received_at = :at " +
+            "WHERE radio = :radio AND id = :id AND outgoing = 1 AND status IN ('FAILED', 'NO_CONTACT')",
+    )
+    fun retry(radio: String, id: Long, at: Long): Int
+
+    @Query("SELECT EXISTS(SELECT 1 FROM contacts WHERE radio = :radio AND prefix = :prefix)")
+    fun hasContact(radio: String, prefix: String): Boolean
+
+    @Query("SELECT * FROM messages WHERE radio = :radio AND id = :id")
+    fun messageFlow(radio: String, id: Long): Flow<MessageRow?>
 
     @Query("SELECT name FROM contacts WHERE radio = :radio AND prefix = :prefix LIMIT 1")
     fun contactName(radio: String, prefix: String): String?

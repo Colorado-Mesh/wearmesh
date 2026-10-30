@@ -25,12 +25,20 @@ class RoomMessageStore(private val db: WearMeshDatabase, override val address: S
         if (contacts.isEmpty()) return
         dao.saveContacts(
             contacts.map {
-                ContactRow(address, it.publicKeyHex, it.publicKeyHex.take(PREFIX_CHARS), it.name, it.type, it.lastAdvert, readAt)
+                ContactRow(address, it.publicKeyHex, it.publicKeyHex.take(PREFIX_CHARS), it.name, it.type, it.lastAdvert, readAt, it.isFavourite)
             },
         )
     }
 
-    override fun dropContactsNotSeenSince(readAt: Long) = dao.dropContactsNotSeenSince(address, readAt)
+    override fun dropContactsNotSeenSince(readAt: Long): List<DroppedContact> = db.runInTransaction(
+        Callable {
+            val notable = dao.notableNotSeenSince(address, readAt).map { DroppedContact(it.name, it.prefix, it.favourite) }
+            dao.dropContactsNotSeenSince(address, readAt)
+            notable
+        },
+    )
+
+    override fun favouriteNames(): List<String> = dao.favouriteNames(address)
 
     override fun setContactsSince(since: Long) = dao.setContactsSince(address, since)
 
@@ -104,6 +112,10 @@ class RoomMessageStore(private val db: WearMeshDatabase, override val address: S
         dao.pendingOutgoing(address).map { OutgoingMessage(it.id, it.conversation, it.body, it.receivedAt) }
 
     override fun setOutgoingStatus(id: Long, status: OutgoingStatus) = dao.setStatus(address, id, status.name)
+
+    override fun retryOutgoing(id: Long, at: Long): Boolean = dao.retry(address, id, at) > 0
+
+    override fun hasContact(prefix: String): Boolean = dao.hasContact(address, prefix.lowercase())
 
     private companion object {
         const val PREFIX_CHARS = 12

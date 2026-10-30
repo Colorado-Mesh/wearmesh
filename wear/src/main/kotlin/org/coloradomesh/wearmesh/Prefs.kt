@@ -43,6 +43,9 @@ object Prefs {
     /** Notification choices for one radio's conversations; the key is this plus the radio's address. */
     const val NOTIFY_CHOICES = "notify_choices_"
 
+    /** The quick replies, as [org.coloradomesh.wearmesh.ui.QuickReplies] formats them; unset means the starting set. */
+    const val QUICK_REPLIES = "quick_replies"
+
     fun of(context: Context): SharedPreferences =
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 }

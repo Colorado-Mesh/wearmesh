@@ -42,6 +42,8 @@ data class ContactRow(
     @ColumnInfo(name = "last_advert") val lastAdvert: Long,
     /** When this contact was last read from the radio, by the watch's clock. */
     @ColumnInfo(name = "seen_at") val seenAt: Long,
+    /** Marked as a favourite on the radio (schema version 4). */
+    @ColumnInfo(defaultValue = "0") val favourite: Boolean = false,
 )
 
 /**

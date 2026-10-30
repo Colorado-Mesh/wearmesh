@@ -47,7 +47,13 @@ enum class OutgoingStatus {
 
     /** Not sent: the radio refused it, or it waited too long for a connection. */
     FAILED,
+
+    /** A direct message the radio refused, to a node it has no contact for (step 1 found its list full). */
+    NO_CONTACT,
 }
+
+/** A contact the radio stopped listing, for the log. */
+data class DroppedContact(val name: String, val prefix: String, val favourite: Boolean)
 
 /** A message this watch has still to send. */
 data class OutgoingMessage(
@@ -85,8 +91,14 @@ interface MessageStore {
     /** Adds or updates these contacts, marking them seen at [readAt]. */
     fun saveContacts(contacts: List<Contact>, readAt: Long)
 
-    /** After a full contact list read at [readAt]: drops contacts the radio no longer has. */
-    fun dropContactsNotSeenSince(readAt: Long)
+    /**
+     * After a full contact list read at [readAt]: drops contacts the radio no longer has, and
+     * returns those of them that are favourites or have a direct-message conversation.
+     */
+    fun dropContactsNotSeenSince(readAt: Long): List<DroppedContact>
+
+    /** The names of the contacts marked as favourites on the radio, as last read. */
+    fun favouriteNames(): List<String>
 
     fun setContactsSince(since: Long)
 
@@ -117,6 +129,15 @@ interface MessageStore {
     fun pendingOutgoing(): List<OutgoingMessage>
 
     fun setOutgoingStatus(id: Long, status: OutgoingStatus)
+
+    /**
+     * Sends the failed message [id] again: it waits as if written at [at]. False when it is not
+     * failed (any more), so nothing is sent twice.
+     */
+    fun retryOutgoing(id: Long, at: Long): Boolean
+
+    /** Whether the radio's contact list, as last read, has a node whose key starts with [prefix]. */
+    fun hasContact(prefix: String): Boolean
 
     companion object {
         /** Decided for M2: the newest 100 messages per conversation. */

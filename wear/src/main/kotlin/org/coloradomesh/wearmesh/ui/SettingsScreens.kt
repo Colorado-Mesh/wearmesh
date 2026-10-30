@@ -30,6 +30,7 @@ fun SettingsScreen(
     onInterval: () -> Unit,
     onAllowAlarms: () -> Unit,
     onNotifications: () -> Unit,
+    onQuickReplies: () -> Unit,
     onAllowNotifications: () -> Unit,
     onReadEverything: () -> Unit,
     onDiagnostics: () -> Unit,
@@ -57,6 +58,7 @@ fun SettingsScreen(
         }
         if (state.hasRadio) {
             item { WideChip("Notifications", detail = "On or off for each conversation", secondary = true) { onNotifications() } }
+            item { WideChip("Quick replies", detail = "Change, add or remove", secondary = true) { onQuickReplies() } }
         }
         if (!state.notificationsAllowed) {
             item { WideChip("Allow notifications", detail = "They are off for WearMesh", detailLines = 2) { onAllowNotifications() } }

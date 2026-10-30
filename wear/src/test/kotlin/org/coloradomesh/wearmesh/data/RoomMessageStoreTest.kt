@@ -234,4 +234,45 @@ class RoomMessageStoreTest {
         assertEquals(1, store.saveChannels(listOf(Channel(3, "mesh-ops", Channel.Kind.PRIVATE))))
         assertTrue(store.pendingOutgoing().isEmpty())
     }
+
+    @Test
+    fun onlyAFailedMessageCanBeTriedAgain() {
+        val id = store.addOutgoing("d:a1b2c3d4e5f6", "W0RMT", "Copy", 1_800_000_060_000)
+        assertFalse(store.retryOutgoing(id, 1_800_000_120_000))
+        store.setOutgoingStatus(id, OutgoingStatus.NO_CONTACT)
+        assertTrue(store.retryOutgoing(id, 1_800_000_120_000))
+        assertEquals(listOf(OutgoingMessage(id, "d:a1b2c3d4e5f6", "Copy", 1_800_000_120_000)), store.pendingOutgoing())
+        assertFalse(other.retryOutgoing(id, 1_800_000_180_000))
+
+        val failed = store.addOutgoing("c:0", "W0RMT", "OK", 1_800_000_060_000)
+        store.setOutgoingStatus(failed, OutgoingStatus.FAILED)
+        assertTrue(store.retryOutgoing(failed, 1_800_000_200_000))
+        assertEquals("SENDING", db.dao().messages(address, "c:0").single().status)
+    }
+
+    @Test
+    fun knowsWhichContactsTheRadioListed() {
+        store.saveContacts(listOf(contact('a', "Ann")), readAt = 1_800_000_000_000)
+        assertTrue(store.hasContact("aaaaaaaaaaaa"))
+        assertFalse(store.hasContact("bbbbbbbbbbbb"))
+        assertFalse(other.hasContact("aaaaaaaaaaaa"))
+    }
+
+    @Test
+    fun aFullReadReportsTheFavouritesAndConversationContactsItDrops() {
+        val favourite = contact('a', "Ann").copy(flags = Contact.FLAG_FAVOURITE)
+        store.saveContacts(listOf(favourite, contact('b', "Bo"), contact('c', "Cy")), readAt = 1_800_000_000_000)
+        store.addMessage(message("hi", conversation = "d:bbbbbbbbbbbb", sender = ""))
+        assertEquals(listOf("Ann"), store.favouriteNames())
+
+        // The next full read lists only Cy.
+        store.saveContacts(listOf(contact('c', "Cy")), readAt = 1_800_003_600_000)
+        val dropped = store.dropContactsNotSeenSince(1_800_003_600_000)
+        assertEquals(
+            setOf(DroppedContact("Ann", "aaaaaaaaaaaa", favourite = true), DroppedContact("Bo", "bbbbbbbbbbbb", favourite = false)),
+            dropped.toSet(),
+        )
+        assertFalse(store.hasContact("aaaaaaaaaaaa"))
+        assertTrue(store.favouriteNames().isEmpty())
+    }
 }

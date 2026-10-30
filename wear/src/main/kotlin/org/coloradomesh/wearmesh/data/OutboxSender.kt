@@ -1,5 +1,6 @@
 package org.coloradomesh.wearmesh.data
 
+import org.coloradomesh.meshcore.protocol.CompanionClient
 import org.coloradomesh.meshcore.protocol.DirectOutcome
 import java.util.concurrent.Executor
 
@@ -50,16 +51,20 @@ class OutboxSender(
     private val inFlight = HashSet<Long>()
 
     /**
-     * Row ids this sender has ended. Their new status is written after the fact, so a read of the
-     * waiting messages may still list one; this keeps it from being sent twice.
+     * Messages this sender has ended, by row id and time written. Their new status is written
+     * after the fact, so a read of the waiting messages may still list one; this keeps it from
+     * being sent twice. A message tried again (Retry) is written anew, so it is not in here.
      */
-    private val done = HashSet<Long>()
+    private val done = HashSet<String>()
     private val whenIdle = ArrayList<() -> Unit>()
     private var more = false
     private var finished = false
 
     /** Refills queued on [writer] and not yet run: the sender is not idle while one waits. */
     private var refills = 0
+
+    /** The radio's error code for each refused direct message, by the shared code's id, until its result comes. */
+    private val refusedWith = HashMap<Long, Int?>()
 
     /** Messages ended so far by this sender, for the log. */
     @Volatile
@@ -93,7 +98,7 @@ class OutboxSender(
         synchronized(lock) {
             if (refill) refills--
             for (message in pending) {
-                if (message.id in inFlight || message.id in done) continue
+                if (message.id in inFlight || doneKey(message) in done) continue
                 if (now - message.createdAt > STALE_MS) {
                     record(message, OutgoingStatus.FAILED, "not sent within ${STALE_MS / 60_000} min of writing it")
                     continue
@@ -155,13 +160,24 @@ class OutboxSender(
         if (accepted) end(message, OutgoingStatus.SENT, null) else end(message, OutgoingStatus.FAILED, "the radio would not send it")
     }
 
+    /** From the protocol client: why the radio refused the direct message [id], just before its result. */
+    fun onDirectRefused(id: Long, errorCode: Int?) {
+        synchronized(lock) { refusedWith[id] = errorCode }
+    }
+
     /** From the protocol client: how a direct message ended. */
     fun onDirectResult(id: Long, outcome: DirectOutcome) {
-        val message = synchronized(lock) { directsWaiting.remove(id) } ?: return
+        val (message, code) = synchronized(lock) { directsWaiting.remove(id) to refusedWith.remove(id) }
+        if (message == null) return
         when (outcome) {
             DirectOutcome.DELIVERED -> end(message, OutgoingStatus.DELIVERED, null)
             DirectOutcome.UNCONFIRMED -> end(message, OutgoingStatus.UNCONFIRMED, "no acknowledgement after every try")
-            DirectOutcome.REFUSED -> end(message, OutgoingStatus.FAILED, "the radio would not send it (is the contact on the radio?)")
+            // Step 1 found the radio's contact list full and dropping contacts, people being messaged among them.
+            DirectOutcome.REFUSED -> if (code == CompanionClient.ERROR_NOT_FOUND) {
+                end(message, OutgoingStatus.NO_CONTACT, "your radio does not have this contact (its list may be full)")
+            } else {
+                end(message, OutgoingStatus.FAILED, "the radio would not send it" + (code?.let { " (error $it)" } ?: ", or did not answer"))
+            }
         }
     }
 
@@ -203,7 +219,7 @@ class OutboxSender(
     }
 
     private fun record(message: OutgoingMessage, status: OutgoingStatus, why: String?) {
-        synchronized(lock) { done.add(message.id) }
+        synchronized(lock) { done.add(doneKey(message)) }
         ended++
         val what = if (message.conversation.startsWith("d:")) "Direct message to ${message.conversation.removePrefix("d:")}" else
             "Message on channel ${message.conversation.removePrefix("c:")}"
@@ -216,6 +232,8 @@ class OutboxSender(
             }
         }
     }
+
+    private fun doneKey(message: OutgoingMessage) = "${message.id}@${message.createdAt}"
 
     private fun runIfIdle() {
         if (synchronized(lock) { inFlight.isEmpty() && refills == 0 }) runWaiters()
@@ -233,7 +251,7 @@ class OutboxSender(
         OutgoingStatus.SENT -> "sent"
         OutgoingStatus.DELIVERED -> "delivered"
         OutgoingStatus.UNCONFIRMED -> "not confirmed"
-        OutgoingStatus.FAILED -> "failed"
+        OutgoingStatus.FAILED, OutgoingStatus.NO_CONTACT -> "failed"
     }
 
     companion object {
