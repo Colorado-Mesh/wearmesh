@@ -8,6 +8,7 @@ import org.coloradomesh.wearmesh.Outbox
 import org.coloradomesh.wearmesh.Prefs
 import org.coloradomesh.wearmesh.SpikeLog
 import org.coloradomesh.wearmesh.data.Storage
+import org.coloradomesh.wearmesh.glance.Glances
 import org.coloradomesh.wearmesh.ui.Drafts
 
 /**
@@ -69,7 +70,10 @@ class MessageActionReceiver : BroadcastReceiver() {
 
     private fun markRead(context: Context, radio: String, conversation: String) {
         val dao = Storage.dao(context)
-        Storage.later { dao.markRead(radio, conversation) }
+        Storage.later {
+            dao.markRead(radio, conversation)
+            Glances.refresh(context)
+        }
         Notifier.dismiss(context, radio, conversation)
     }
 

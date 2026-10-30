@@ -30,6 +30,7 @@ import org.coloradomesh.wearmesh.data.OutboxSender
 import org.coloradomesh.wearmesh.data.Storage
 import org.coloradomesh.wearmesh.data.SyncPlan
 import org.coloradomesh.wearmesh.data.SyncRecorder
+import org.coloradomesh.wearmesh.glance.Glances
 import org.coloradomesh.wearmesh.notify.Notifier
 import java.util.Collections
 import java.util.concurrent.atomic.AtomicReference
@@ -220,6 +221,7 @@ class SpikeService : Service() {
         reconnects = 0
         releaseWakeLock()
         SpikeLog.log("M0: link up, packet size $packetSize bytes")
+        Glances.refresh(this)
         SpikeState.update { it.copy(link = "Connected", packetSize = packetSize) }
         goForeground("Connected")
     }
@@ -302,6 +304,7 @@ class SpikeService : Service() {
         cancelReconnectAlarm()
         releaseWakeLock()
         SpikeLog.log("M0: stopped; watch battery ${watchBattery()}%")
+        Glances.refresh(this)
         SpikeState.update { SpikeState.Snapshot() }
         address = null
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
@@ -385,6 +388,7 @@ class SpikeService : Service() {
                 val backlog = prefs.getString(Prefs.QUIET_SYNC_RADIO, null) == radio
                 if (backlog) prefs.edit().remove(Prefs.QUIET_SYNC_RADIO).apply()
                 Notifier.afterSync(this@SpikeService, radio, batch, backlog)
+                Glances.refresh(this@SpikeService)
             }
         }
 

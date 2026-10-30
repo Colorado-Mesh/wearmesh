@@ -13,6 +13,14 @@ import kotlinx.coroutines.flow.Flow
  * them on its own threads and runs them again whenever a table they read changes, so a check-in
  * in the background updates what is on screen.
  */
+/** Each conversation's newest message with its unread count; shared by the screens and the glance (M4). */
+private const val LAST_MESSAGES =
+    "SELECT m.conversation AS conversation, m.sender AS sender, m.body AS body, m.received_at AS receivedAt, " +
+        "(SELECT COUNT(*) FROM messages u WHERE u.radio = m.radio AND u.conversation = m.conversation AND u.read = 0) AS unread, " +
+        "(SELECT c.name FROM contacts c WHERE c.radio = m.radio AND c.prefix = substr(m.conversation, 3) LIMIT 1) AS contactName, " +
+        "m.outgoing AS outgoing " +
+        "FROM messages m WHERE m.id IN (SELECT MAX(id) FROM messages WHERE radio = :radio GROUP BY conversation)"
+
 @Dao
 interface StoreDao {
     @Query("SELECT * FROM radios WHERE address = :radio")
@@ -89,14 +97,12 @@ interface StoreDao {
     fun channelsFlow(radio: String): Flow<List<ChannelRow>>
 
     /** Each conversation's newest message, its unread count, and for a direct message the contact's name. */
-    @Query(
-        "SELECT m.conversation AS conversation, m.sender AS sender, m.body AS body, m.received_at AS receivedAt, " +
-            "(SELECT COUNT(*) FROM messages u WHERE u.radio = m.radio AND u.conversation = m.conversation AND u.read = 0) AS unread, " +
-            "(SELECT c.name FROM contacts c WHERE c.radio = m.radio AND c.prefix = substr(m.conversation, 3) LIMIT 1) AS contactName, " +
-            "m.outgoing AS outgoing " +
-            "FROM messages m WHERE m.id IN (SELECT MAX(id) FROM messages WHERE radio = :radio GROUP BY conversation)",
-    )
+    @Query(LAST_MESSAGES)
     fun lastMessagesFlow(radio: String): Flow<List<ConversationLast>>
+
+    /** The same, once, for the complication and the Tile (M4). */
+    @Query(LAST_MESSAGES)
+    fun lastMessages(radio: String): List<ConversationLast>
 
     @Query("SELECT * FROM messages WHERE radio = :radio AND conversation = :conversation ORDER BY id")
     fun messagesFlow(radio: String, conversation: String): Flow<List<MessageRow>>

@@ -38,6 +38,7 @@ import org.coloradomesh.meshcore.ble.FoundRadio
 import org.coloradomesh.meshcore.ble.RadioScanner
 import org.coloradomesh.wearmesh.data.ConversationLast
 import org.coloradomesh.wearmesh.data.Storage
+import org.coloradomesh.wearmesh.glance.Glances
 import org.coloradomesh.wearmesh.notify.Notifier
 import org.coloradomesh.wearmesh.notify.NotifyRules
 import org.coloradomesh.wearmesh.ui.ConfirmScreen
@@ -454,7 +455,12 @@ class MainActivity : ComponentActivity() {
                     now = now,
                     notifyOn = NotifyRules.isOn(key, kind, choices),
                     favouriteWarning = if (contact.isEmpty()) null else NewMessage.favouriteWarning(key, contact.first()),
-                    onSeen = { Storage.later { dao.markRead(radioInUse, key) } },
+                    onSeen = {
+                        Storage.later {
+                            dao.markRead(radioInUse, key)
+                            Glances.refresh(this@MainActivity)
+                        }
+                    },
                     onToggleNotify = {
                         Notifier.setChoice(this@MainActivity, radioInUse, key, kind, !NotifyRules.isOn(key, kind, choices))
                     },

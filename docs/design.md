@@ -179,6 +179,8 @@ Four milestones, each ending in a go/no-go check; the first is a throwaway spike
    - Steps: (1) outbox and sending, [M3-step1-sending.md](M3-step1-sending.md); (2) compose, [M3-step2-compose.md](M3-step2-compose.md); (3) notification reply, [M3-step3-notification-reply.md](M3-step3-notification-reply.md); (4) new message, [M3-step4-new-message.md](M3-step4-new-message.md); (5) field test, [M3-step5-field-test.md](M3-step5-field-test.md).
    - Complete (30 October 2026): every field-test check passed, the reply from a notification after adding Quick reply, since the Pixel Watch does not show quick replies given to a notification's reply.
 5. **M4 — Tile and complication.** Unread count, Check now and the newest message on a Tile; an unread-count complication.
+   - Decided (30 October 2026): the count is unread messages in conversations whose notifications are on; the Tile shows the newest two unread messages, the status line and mode, and Check now (opening the app), Quick reply and Open WearMesh; the complication shows the count with the icon (the icon alone when nothing is unread) or, in a wide slot, when the last sync was.
+   - Steps: (1) complication, [M4-step1-complication.md](M4-step1-complication.md); (2) Tile; (3) a day's carry.
 
 **M0 results (23 October 2026): complete**
 
