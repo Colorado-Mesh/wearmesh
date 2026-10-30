@@ -23,13 +23,16 @@ import org.coloradomesh.meshcore.protocol.CompanionClient
 import org.coloradomesh.meshcore.protocol.Contact
 import org.coloradomesh.meshcore.protocol.DeviceInfo
 import org.coloradomesh.meshcore.protocol.DirectMessage
+import org.coloradomesh.meshcore.protocol.DirectOutcome
 import org.coloradomesh.meshcore.protocol.SelfInfo
 import org.coloradomesh.wearmesh.data.IncomingMessage
+import org.coloradomesh.wearmesh.data.OutboxSender
 import org.coloradomesh.wearmesh.data.Storage
 import org.coloradomesh.wearmesh.data.SyncPlan
 import org.coloradomesh.wearmesh.data.SyncRecorder
 import org.coloradomesh.wearmesh.notify.Notifier
 import java.util.Collections
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Live mode: holds one link to a companion radio in a connectedDevice foreground service, so it
@@ -49,6 +52,10 @@ import java.util.Collections
  * from. A Handler timer would not do: its clock stops while the watch sleeps,
  * so with the screen off it hardly ever fires.
  *
+ * Each link sends what is waiting in the outbox once its start-up has collected the queue, and
+ * again whenever a message is written ([sendPending]); a link that drops leaves unsent channel
+ * messages for the next. It checks the radio's clock at start-up too (see [RadioClock]).
+ *
  * All state is kept on the main thread; callbacks from the link and the protocol client are posted
  * there first.
  */
@@ -56,6 +63,11 @@ class SpikeService : Service() {
     private val main = Handler(Looper.getMainLooper())
     private var session: RadioSession? = null
     private var recorder: SyncRecorder? = null
+
+    /** The current link's outbox sender, once its start-up has collected the queue; set on the link's threads. */
+    @Volatile
+    private var readyOutbox: OutboxSender? = null
+    private var outbox: OutboxSender? = null
 
     /** Messages stored since the radio's queue was last emptied; notified together, on the storage thread. */
     private val toNotify = Collections.synchronizedList(ArrayList<IncomingMessage>())
@@ -96,9 +108,15 @@ class SpikeService : Service() {
                 session = null
                 recorder?.finish()
                 recorder = null
+                endOutbox()
                 SpikeState.update { SpikeState.Snapshot(running = true, link = "Connecting…") }
                 SpikeLog.log("M0: connecting to $target; watch battery ${watchBattery()}%")
                 openSession()
+            }
+            ACTION_SEND_PENDING -> {
+                // Before start-up has collected the queue, the link sends the outbox itself then.
+                readyOutbox?.sendPending()
+                if (address == null && session == null) stopSelf()
             }
             ACTION_RECONNECT -> {
                 if (address == null) {
@@ -123,6 +141,7 @@ class SpikeService : Service() {
         session = null
         recorder?.finish()
         recorder = null
+        endOutbox()
         main.removeCallbacksAndMessages(null)
         cancelReconnectAlarm()
         releaseWakeLock()
@@ -136,12 +155,43 @@ class SpikeService : Service() {
         val store = Storage.store(this, target)
         // Queued ahead of everything this session writes.
         Storage.later { store.open() }
+        // This link's own session, never a later one's: the sender is called on the storage thread.
+        val link = AtomicReference<RadioSession?>(null)
+        val sender = OutboxSender(
+            store,
+            Storage.writer,
+            object : OutboxSender.Port {
+                override fun sendChannelText(channelIndex: Int, text: String) {
+                    link.get()?.sendChannelText(channelIndex, text)
+                }
+
+                override fun sendDirectText(publicKeyHex: String, text: String): Long? = link.get()?.sendDirectText(publicKeyHex, text)
+            },
+            { SpikeLog.log(it) },
+        )
+        outbox = sender
+        // This link's own answers about sends go to its own sender; the rest to the shared listener.
+        val linkListener = object : CompanionClient.Listener by listener {
+            override fun onQueueEmpty() {
+                listener.onQueueEmpty()
+                if (mine == generation && readyOutbox !== sender) {
+                    readyOutbox = sender
+                    sender.sendPending()
+                }
+            }
+
+            override fun onSendResult(channelIndex: Int, text: String, accepted: Boolean) =
+                sender.onSendResult(channelIndex, text, accepted)
+
+            override fun onDirectResult(id: Long, publicKeyHex: String, text: String, outcome: DirectOutcome) =
+                sender.onDirectResult(id, outcome)
+        }
         val sync = SyncRecorder(
             store,
             SyncPlan(fullRead = true, contactsSince = 0),
             Storage.writer,
             { SpikeLog.log(it) },
-            also = listener,
+            also = linkListener,
             // Gathered and notified once the radio's queue is empty (see onQueueEmpty), so a burst
             // after reconnecting is one update, not one per message.
             onStored = { message -> toNotify.add(message) },
@@ -152,11 +202,13 @@ class SpikeService : Service() {
             address = target,
             listener = sync,
             appName = APP_NAME,
+            startUp = CompanionClient.StartUp(clockTolerance = RadioClock.TOLERANCE_SECONDS),
             onLog = { SpikeLog.log("Link: $it") },
             onLinkReady = { size -> main.post { if (mine == generation) linkReady(size) } },
             onClosed = { reason -> main.post { if (mine == generation) linkClosed(reason) } },
         )
         session = opened
+        link.set(opened)
         opened.open()
     }
 
@@ -174,6 +226,7 @@ class SpikeService : Service() {
         releaseWakeLock()
         recorder?.finish()
         recorder = null
+        endOutbox()
         Storage.refreshCounts(this)
         if (linkUpAt > 0) {
             val minutes = (SystemClock.elapsedRealtime() - linkUpAt) / 60_000.0
@@ -232,6 +285,13 @@ class SpikeService : Service() {
 
     private fun releaseWakeLock() {
         wakeLock?.let { if (it.isHeld) it.release() }
+    }
+
+    /** The link has ended: its sender records what it had handed over, and the next link takes the rest. */
+    private fun endOutbox() {
+        readyOutbox = null
+        outbox?.finish()
+        outbox = null
     }
 
     private fun finish() {
@@ -325,6 +385,10 @@ class SpikeService : Service() {
             }
         }
 
+        override fun onRadioClock(radioSeconds: Long, clientSeconds: Long, setting: Boolean) {
+            RadioClock.describe(radioSeconds, clientSeconds, setting)?.let { SpikeLog.log(it) }
+        }
+
         override fun onBattery(millivolts: Int) {
             if (millivolts > 0) SpikeLog.log("Radio battery: $millivolts mV")
             SpikeLog.log("M0: watch battery ${watchBattery()}%")
@@ -347,6 +411,7 @@ class SpikeService : Service() {
         private const val ACTION_CONNECT = "org.coloradomesh.wearmesh.CONNECT"
         private const val ACTION_STOP = "org.coloradomesh.wearmesh.STOP"
         private const val ACTION_RECONNECT = "org.coloradomesh.wearmesh.RECONNECT"
+        private const val ACTION_SEND_PENDING = "org.coloradomesh.wearmesh.SEND_PENDING"
         private const val EXTRA_ADDRESS = "address"
         private const val CHANNEL_ID = "link"
         private const val NOTIFICATION_ID = 1
@@ -365,6 +430,11 @@ class SpikeService : Service() {
             context.startForegroundService(
                 Intent(context, SpikeService::class.java).setAction(ACTION_CONNECT).putExtra(EXTRA_ADDRESS, address),
             )
+        }
+
+        /** A message was written: send it over the link, now if it is up, else when it next is. */
+        fun sendPending(context: Context) {
+            context.startService(Intent(context, SpikeService::class.java).setAction(ACTION_SEND_PENDING))
         }
 
         /** From [LiveReconnectReceiver]: the reconnect pause is over. */

@@ -37,6 +37,8 @@ fun ConversationScreen(
     notifyOn: Boolean,
     onSeen: () -> Unit,
     onToggleNotify: () -> Unit,
+    /** M3 step 1: sends a fixed test message here, to prove sending before the compose screens. */
+    onSendTest: () -> Unit,
 ) {
     val state = rememberScalingLazyListState()
     var placed by remember { mutableStateOf(false) }
@@ -59,7 +61,8 @@ fun ConversationScreen(
                 secondary = true,
             ) { onToggleNotify() }
         }
-        item { Note("Replies come in a later version") }
+        item { WideChip("Send test message", detail = "\"${SentStatus.TEST_TEXT}\"", secondary = true) { onSendTest() } }
+        item { Note("Replies come in the next version") }
     }
 }
 
@@ -67,11 +70,13 @@ fun ConversationScreen(
 private fun MessageItem(message: MessageRow, selfName: String?, now: Long) {
     val accent = MaterialTheme.colors.primary
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        if (message.sender.isNotEmpty()) {
-            Text(message.sender, style = MaterialTheme.typography.caption1, fontWeight = FontWeight.Bold, maxLines = 1)
+        val sender = if (message.outgoing) "You" else message.sender
+        if (sender.isNotEmpty()) {
+            Text(sender, style = MaterialTheme.typography.caption1, fontWeight = FontWeight.Bold, maxLines = 1)
         }
         Text(withMentions(message.body, selfName, accent), style = MaterialTheme.typography.body2)
-        Text(TimeAgo.format(now, message.receivedAt), style = MaterialTheme.typography.caption3)
+        val time = TimeAgo.format(now, message.receivedAt)
+        Text(SentStatus.label(message.status)?.let { "$time · $it" } ?: time, style = MaterialTheme.typography.caption3)
     }
 }
 

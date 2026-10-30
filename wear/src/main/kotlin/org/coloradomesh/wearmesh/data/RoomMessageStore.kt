@@ -75,6 +75,30 @@ class RoomMessageStore(private val db: WearMeshDatabase, override val address: S
         },
     )
 
+    override fun addOutgoing(conversation: String, sender: String, body: String, at: Long): Long = db.runInTransaction(
+        Callable {
+            val row = MessageRow(
+                radio = address,
+                conversation = conversation,
+                sender = sender,
+                body = body,
+                sentAt = at / 1000,
+                receivedAt = at,
+                read = true,
+                outgoing = true,
+                status = OutgoingStatus.SENDING.name,
+            )
+            val id = dao.insertMessage(row)
+            if (id != -1L) dao.trim(address, conversation, MessageStore.KEEP_PER_CONVERSATION)
+            id
+        },
+    )
+
+    override fun pendingOutgoing(): List<OutgoingMessage> =
+        dao.pendingOutgoing(address).map { OutgoingMessage(it.id, it.conversation, it.body, it.receivedAt) }
+
+    override fun setOutgoingStatus(id: Long, status: OutgoingStatus) = dao.setStatus(address, id, status.name)
+
     private companion object {
         const val PREFIX_CHARS = 12
     }

@@ -18,9 +18,11 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.coloradomesh.meshcore.ble.RadioSession
 import org.coloradomesh.meshcore.protocol.CompanionClient
+import org.coloradomesh.meshcore.protocol.DirectOutcome
 import org.coloradomesh.meshcore.protocol.SelfInfo
 import org.coloradomesh.wearmesh.data.Delays
 import org.coloradomesh.wearmesh.data.IncomingMessage
+import org.coloradomesh.wearmesh.data.OutboxSender
 import org.coloradomesh.wearmesh.data.Storage
 import org.coloradomesh.wearmesh.data.SyncPlan
 import org.coloradomesh.wearmesh.data.SyncRecorder
@@ -28,6 +30,7 @@ import org.coloradomesh.wearmesh.notify.Notifier
 import java.util.Collections
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * One Check-in: connect to the radio, collect what it has queued into the message store,
@@ -49,6 +52,11 @@ import java.util.concurrent.atomic.AtomicLong
  * 1.5 s pause took 6 minutes, because those timers stop while the CPU sleeps. It always
  * disconnects before returning, even when the run is stopped part-way, so the radio is free for
  * the next client.
+ *
+ * Once the queue is collected, it sends what is waiting in the outbox (M3) and stays connected
+ * until each message has ended, up to [SEND_LIMIT_MS]: a direct message is waited on through all
+ * 3 tries (decided for M3). It also checks the radio's clock at start-up and sets it when more
+ * than [RadioClock.TOLERANCE_SECONDS] off (decided for M3).
  */
 object CheckInRun {
     /** For runs that outlive the caller, such as one inside an alarm broadcast. */
@@ -56,6 +64,12 @@ object CheckInRun {
 
     /** Long enough for 4 connection tries, pairing checks and reading a few hundred contacts. */
     const val TIME_LIMIT_MS = 90_000L
+
+    /**
+     * How long to stay connected for the outbox once the queue is collected: 3 tries of a direct
+     * message, each waited on for up to the shared code's 62 s, and some margin.
+     */
+    const val SEND_LIMIT_MS = 200_000L
     private const val CLOSE_WAIT_MS = 5_000L
 
     /** Night 2 of step 1 saw one check-in need all 3 tries after Bluetooth status 133. */
@@ -70,8 +84,17 @@ object CheckInRun {
     /** One check-in at a time in this process, however it was started. */
     private val running = AtomicBoolean(false)
 
-    /** [fullRead] asks for every channel slot and contact, as "Read channels and contacts again" does. */
-    suspend fun run(context: Context, why: String, timeLimitMs: Long = TIME_LIMIT_MS, fullRead: Boolean = false) {
+    /**
+     * [fullRead] asks for every channel slot and contact, as "Read channels and contacts again"
+     * does. [sendLimitMs] 0 sends nothing, for a run that must stay short (inside an alarm).
+     */
+    suspend fun run(
+        context: Context,
+        why: String,
+        timeLimitMs: Long = TIME_LIMIT_MS,
+        fullRead: Boolean = false,
+        sendLimitMs: Long = SEND_LIMIT_MS,
+    ) {
         val app = context.applicationContext
         SpikeLog.init(app)
         if (!running.compareAndSet(false, true)) {
@@ -82,10 +105,10 @@ object CheckInRun {
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "WearMesh:check-in")
             .apply {
                 setReferenceCounted(false)
-                acquire(timeLimitMs + CLOSE_WAIT_MS + 2 * STORE_WAIT_MS + WAKE_MARGIN_MS)
+                acquire(timeLimitMs + sendLimitMs + CLOSE_WAIT_MS + 2 * STORE_WAIT_MS + WAKE_MARGIN_MS)
             }
         try {
-            checkIn(app, why, timeLimitMs, fullRead)
+            checkIn(app, why, timeLimitMs, fullRead, sendLimitMs)
         } catch (e: CancellationException) {
             SpikeLog.log("Check-in ($why): stopped before it finished")
             throw e
@@ -95,7 +118,7 @@ object CheckInRun {
         }
     }
 
-    private suspend fun checkIn(app: Context, why: String, timeLimitMs: Long, fullRead: Boolean) {
+    private suspend fun checkIn(app: Context, why: String, timeLimitMs: Long, fullRead: Boolean, sendLimitMs: Long) {
         val address = Prefs.of(app).getString(Prefs.RADIO_ADDRESS, null)
         if (address == null) {
             SpikeLog.log("Check-in ($why): skipped, no radio chosen yet")
@@ -114,7 +137,7 @@ object CheckInRun {
         SyncStatus.started()
         var problem: String? = "stopped before it finished"
         try {
-            problem = connectAndCollect(app, address, fullRead, started, timeLimitMs)
+            problem = connectAndCollect(app, address, fullRead, started, timeLimitMs, sendLimitMs)
         } finally {
             SyncStatus.finished(app, problem)
         }
@@ -127,6 +150,7 @@ object CheckInRun {
         fullRead: Boolean,
         started: Long,
         timeLimitMs: Long,
+        sendLimitMs: Long,
     ): String? {
         val store = Storage.store(app, address)
         // The first sync after choosing a radio brings its backlog, which does not notify (decided
@@ -151,6 +175,22 @@ object CheckInRun {
         val closed = CompletableDeferred<String>()
         val linkUpAt = AtomicLong(0)
 
+        // The outbox goes over this connection once the queue is collected.
+        val link = AtomicReference<RadioSession?>(null)
+        val sender = OutboxSender(
+            store,
+            Storage.writer,
+            object : OutboxSender.Port {
+                override fun sendChannelText(channelIndex: Int, text: String) {
+                    link.get()?.sendChannelText(channelIndex, text)
+                }
+
+                override fun sendDirectText(publicKeyHex: String, text: String): Long? = link.get()?.sendDirectText(publicKeyHex, text)
+            },
+            { SpikeLog.log("Check-in: $it") },
+        )
+        val sendsDone = CompletableDeferred<Unit>()
+
         // Called on the link's threads with the protocol client locked: nothing here may block.
         val listener = object : CompanionClient.Listener {
             override fun onLog(message: String) = SpikeLog.log("Check-in radio: $message")
@@ -158,9 +198,21 @@ object CheckInRun {
             // Saved without waiting; mentions of this name stand out in conversations.
             override fun onSelf(info: SelfInfo) = Prefs.of(app).edit().putString(Prefs.SELF_NAME, info.name).apply()
 
+            override fun onRadioClock(radioSeconds: Long, clientSeconds: Long, setting: Boolean) {
+                RadioClock.describe(radioSeconds, clientSeconds, setting)?.let { SpikeLog.log("Check-in: $it") }
+            }
+
             override fun onQueueEmpty() {
+                if (outcome.isCompleted) return
+                if (sendLimitMs > 0) sender.sendPending { sendsDone.complete(Unit) } else sendsDone.complete(Unit)
                 outcome.complete(Outcome.Drained)
             }
+
+            override fun onSendResult(channelIndex: Int, text: String, accepted: Boolean) =
+                sender.onSendResult(channelIndex, text, accepted)
+
+            override fun onDirectResult(id: Long, publicKeyHex: String, text: String, outcome: DirectOutcome) =
+                sender.onDirectResult(id, outcome)
         }
         // Collected on the storage thread, notified about once the check-in is over.
         val newlyStored = Collections.synchronizedList(ArrayList<IncomingMessage>())
@@ -180,16 +232,25 @@ object CheckInRun {
             onLog = { SpikeLog.log("Check-in link: $it") },
             onLinkReady = { linkUpAt.set(SystemClock.elapsedRealtime()) },
             connectTries = CONNECT_TRIES,
-            startUp = plan.startUp,
+            startUp = plan.startUp.copy(clockTolerance = RadioClock.TOLERANCE_SECONDS),
             onClosed = { reason ->
                 closed.complete(reason)
                 outcome.complete(Outcome.Ended(reason))
+                // Ends any wait for the outbox, and records what it had handed over.
+                sender.finish()
             },
         )
+        link.set(session)
         val result = try {
             session.open()
-            withTimeoutOrNull(timeLimitMs) { outcome.await() }
+            val collected = withTimeoutOrNull(timeLimitMs) { outcome.await() }
                 ?: Outcome.Ended("not finished within ${timeLimitMs / 1000} s")
+            if (collected == Outcome.Drained && sendLimitMs > 0) {
+                if (withTimeoutOrNull(sendLimitMs) { sendsDone.await() } == null) {
+                    SpikeLog.log("Check-in: messages still sending after ${sendLimitMs / 1000} s; disconnecting")
+                }
+            }
+            collected
         } finally {
             // Also when the system stops the job: a link left open would keep the radio busy,
             // locking out the Live link and the next check-in.
@@ -199,6 +260,7 @@ object CheckInRun {
                     SpikeLog.log("Check-in: the link did not report closing within ${CLOSE_WAIT_MS / 1000} s")
                 }
             }
+            sender.finish()
             // Hand the store any contacts still gathered. Anything the radio sends after this, if
             // the link was slow to close, is logged and not stored.
             recorder.finish()

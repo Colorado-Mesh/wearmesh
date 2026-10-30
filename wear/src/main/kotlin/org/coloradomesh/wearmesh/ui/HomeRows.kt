@@ -58,6 +58,10 @@ object HomeRows {
         else -> "Not synced yet"
     }
 
-    /** "Ann: hello", or the text alone when there is no sender (a direct message). */
-    fun preview(last: ConversationLast): String = if (last.sender.isEmpty()) last.body else "${last.sender}: ${last.body}"
+    /** "Ann: hello", "You: hello" for a message the watch sent, or the text alone when there is no sender (a direct message). */
+    fun preview(last: ConversationLast): String = when {
+        last.outgoing -> "You: ${last.body}"
+        last.sender.isEmpty() -> last.body
+        else -> "${last.sender}: ${last.body}"
+    }
 }

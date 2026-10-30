@@ -28,7 +28,8 @@ class CheckInAlarmReceiver : BroadcastReceiver() {
             val app = context.applicationContext
             CheckInRun.scope.launch {
                 try {
-                    CheckInRun.run(app, "scheduled, inside the alarm", IN_ALARM_LIMIT_MS)
+                    // Too short a run to wait on sends; the outbox goes with the next check-in.
+                    CheckInRun.run(app, "scheduled, inside the alarm", IN_ALARM_LIMIT_MS, sendLimitMs = 0)
                 } finally {
                     pending.finish()
                 }

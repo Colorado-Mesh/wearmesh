@@ -64,7 +64,8 @@ interface StoreDao {
     @Query(
         "SELECT m.conversation AS conversation, m.sender AS sender, m.body AS body, m.received_at AS receivedAt, " +
             "(SELECT COUNT(*) FROM messages u WHERE u.radio = m.radio AND u.conversation = m.conversation AND u.read = 0) AS unread, " +
-            "(SELECT c.name FROM contacts c WHERE c.radio = m.radio AND c.prefix = substr(m.conversation, 3) LIMIT 1) AS contactName " +
+            "(SELECT c.name FROM contacts c WHERE c.radio = m.radio AND c.prefix = substr(m.conversation, 3) LIMIT 1) AS contactName, " +
+            "m.outgoing AS outgoing " +
             "FROM messages m WHERE m.id IN (SELECT MAX(id) FROM messages WHERE radio = :radio GROUP BY conversation)",
     )
     fun lastMessagesFlow(radio: String): Flow<List<ConversationLast>>
@@ -78,6 +79,13 @@ interface StoreDao {
             "ORDER BY id DESC LIMIT :limit",
     )
     fun unreadMessages(radio: String, conversation: String, limit: Int): List<MessageRow>
+
+    /** Messages this watch has still to send, oldest first. */
+    @Query("SELECT * FROM messages WHERE radio = :radio AND outgoing = 1 AND status = 'SENDING' ORDER BY id")
+    fun pendingOutgoing(radio: String): List<MessageRow>
+
+    @Query("UPDATE messages SET status = :status WHERE radio = :radio AND id = :id AND outgoing = 1")
+    fun setStatus(radio: String, id: Long, status: String)
 
     @Query("SELECT name FROM contacts WHERE radio = :radio AND prefix = :prefix LIMIT 1")
     fun contactName(radio: String, prefix: String): String?

@@ -84,11 +84,17 @@ object CheckIn {
     /** Why one runs from Settings' "Read channels and contacts again": a full read. */
     const val FULL_READ_ASKED_FOR = "full read asked for"
 
+    /** Why one runs when a message is written in Check-in mode: it is sent at once (decided for M3). */
+    const val TO_SEND = "to send"
+
     /** Why one runs when the app comes on screen (decided for M2: opening the app syncs). */
     const val APP_OPENED = "app opened"
 
     /** One check-in now, while the app is on screen; [full] reads every channel slot and contact too. */
     fun now(context: Context, full: Boolean = false) = CheckInService.start(context, if (full) FULL_READ_ASKED_FOR else ASKED_FOR)
+
+    /** A connection now, to send what is waiting in the outbox; a brief read, like any check-in. */
+    fun send(context: Context) = CheckInService.start(context, TO_SEND)
 
     /** The sync when the app is opened. */
     fun onOpen(context: Context) = CheckInService.start(context, APP_OPENED)

@@ -188,4 +188,33 @@ class RoomMessageStoreTest {
         }
         assertEquals("Bo renamed" to "bbbbbbbbbbbb", bo)
     }
+
+    @Test
+    fun aMessageToSendWaitsUntilItsStatusIsSet() {
+        val first = store.addOutgoing("c:0", "W0RMT", "OK", 1_800_000_060_000)
+        val second = store.addOutgoing("d:a1b2c3d4e5f6", "W0RMT", "On my way", 1_800_000_061_000)
+        assertEquals(listOf(first, second), store.pendingOutgoing().map { it.id })
+        assertTrue(other.pendingOutgoing().isEmpty())
+
+        store.setOutgoingStatus(first, OutgoingStatus.SENT)
+        assertEquals(listOf(second), store.pendingOutgoing().map { it.id })
+        val sent = db.dao().messages(address, "c:0").single()
+        assertTrue(sent.outgoing)
+        assertTrue(sent.read)
+        assertEquals("SENT", sent.status)
+    }
+
+    @Test
+    fun theSameTextInTheSameSecondIsWrittenOnce() {
+        assertTrue(store.addOutgoing("c:0", "W0RMT", "OK", 1_800_000_060_000) > 0)
+        assertEquals(-1L, store.addOutgoing("c:0", "W0RMT", "OK", 1_800_000_060_900))
+        assertTrue(store.addOutgoing("c:0", "W0RMT", "OK", 1_800_000_061_000) > 0)
+    }
+
+    @Test
+    fun anotherRadiosStatusCannotBeSet() {
+        val id = store.addOutgoing("c:0", "W0RMT", "OK", 1_800_000_060_000)
+        other.setOutgoingStatus(id, OutgoingStatus.FAILED)
+        assertEquals(listOf(id), store.pendingOutgoing().map { it.id })
+    }
 }

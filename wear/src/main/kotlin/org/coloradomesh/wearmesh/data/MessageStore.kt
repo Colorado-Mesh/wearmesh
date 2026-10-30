@@ -31,6 +31,33 @@ data class IncomingMessage(
     val receivedAt: Long,
 )
 
+/** Where a message this watch sent has got to (M3). */
+enum class OutgoingStatus {
+    /** Waiting for a connection, or handed to the radio and not yet answered. */
+    SENDING,
+
+    /** A channel message the radio took. MeshCore reports nothing more for channel messages. */
+    SENT,
+
+    /** A direct message its recipient acknowledged. */
+    DELIVERED,
+
+    /** A direct message sent on every try with no acknowledgement; it may still have arrived. */
+    UNCONFIRMED,
+
+    /** Not sent: the radio refused it, or it waited too long for a connection. */
+    FAILED,
+}
+
+/** A message this watch has still to send. */
+data class OutgoingMessage(
+    val id: Long,
+    val conversation: String,
+    val body: String,
+    /** When it was written, by the watch's clock, in milliseconds. */
+    val createdAt: Long,
+)
+
 data class StoreCounts(val messages: Int, val conversations: Int, val contacts: Int, val channels: Int)
 
 /**
@@ -77,6 +104,18 @@ interface MessageStore {
     fun addMessage(message: IncomingMessage): Boolean
 
     fun counts(): StoreCounts
+
+    /**
+     * Stores a message to send in [conversation], waiting ([OutgoingStatus.SENDING]); [sender] is
+     * this radio's node name. Returns its id, or -1 when the same text was already written in the
+     * same second (a double tap).
+     */
+    fun addOutgoing(conversation: String, sender: String, body: String, at: Long): Long
+
+    /** Messages still to send, oldest first. */
+    fun pendingOutgoing(): List<OutgoingMessage>
+
+    fun setOutgoingStatus(id: Long, status: OutgoingStatus)
 
     companion object {
         /** Decided for M2: the newest 100 messages per conversation. */

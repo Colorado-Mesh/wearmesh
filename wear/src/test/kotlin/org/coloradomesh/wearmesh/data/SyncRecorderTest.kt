@@ -41,6 +41,9 @@ class SyncRecorderTest {
             return true
         }
         override fun counts() = StoreCounts(messages.size, 0, 0, 0)
+        override fun addOutgoing(conversation: String, sender: String, body: String, at: Long) = -1L
+        override fun pendingOutgoing() = emptyList<OutgoingMessage>()
+        override fun setOutgoingStatus(id: Long, status: OutgoingStatus) {}
     }
 
     private val store = FakeStore()
