@@ -23,15 +23,21 @@ object NewMessage {
     /** How many recently heard companions to list; the radio holds hundreds. */
     const val RECENT = 20
 
+    /** An advert this far ahead of the watch's clock still counts as just now. */
+    private const val CLOCK_SLACK_MS = 60_000L
+
     fun build(favourites: List<ContactRow>, recent: List<ContactRow>, channels: List<ChannelRow>, now: Long): Picks = Picks(
         favourites = favourites.map { Pick(Conversations.direct(it.prefix), it.name, null) },
         recent = recent.map { Pick(Conversations.direct(it.prefix), it.name, heard(now, it.lastAdvert)) },
         channels = channels.sortedBy { it.slot }.map { Pick(Conversations.channel(it.slot), it.name, null) },
     )
 
-    /** "Heard 4 min ago", by the time the node gave in its advert (its own clock). */
+    /**
+     * "Heard 4 min ago", by the time the node gave in its advert (its own clock). None for an
+     * advert dated ahead of the watch: its clock is wrong, so its age is unknown.
+     */
     private fun heard(now: Long, lastAdvertSeconds: Long): String? {
-        if (lastAdvertSeconds <= 0) return null
+        if (lastAdvertSeconds <= 0 || lastAdvertSeconds * 1000 > now + CLOCK_SLACK_MS) return null
         val age = TimeAgo.format(now, lastAdvertSeconds * 1000)
         return when {
             age == "now" -> "Heard just now"
@@ -67,7 +73,7 @@ fun NewMessageScreen(picks: Picks, onPick: (Pick) -> Unit) {
             }
         }
         if (picks.favourites.isEmpty() && picks.recent.isEmpty()) {
-            item { Note("No contacts yet. They appear after the first full read of the radio.") }
+            item { Note("No companions on the radio's list yet. They appear once the radio has heard their adverts, at the next full read.") }
         }
         if (picks.channels.isNotEmpty()) {
             item { ListHeader { Text("Channels") } }

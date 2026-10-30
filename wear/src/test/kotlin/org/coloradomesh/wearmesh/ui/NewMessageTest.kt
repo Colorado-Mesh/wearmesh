@@ -27,6 +27,17 @@ class NewMessageTest {
     }
 
     @Test
+    fun anAdvertFromAClockAheadHasNoTime() {
+        val picks = NewMessage.build(
+            favourites = emptyList(),
+            recent = listOf(contact("aaaaaaaaaaaa", "Ahead", heardSecondsAgo = -600), contact("bbbbbbbbbbbb", "Slightly", heardSecondsAgo = -30)),
+            channels = emptyList(),
+            now = now,
+        )
+        assertEquals(listOf(null, "Heard just now"), picks.recent.map { it.detail })
+    }
+
+    @Test
     fun aDirectConversationIsFlaggedUnlessAFavourite() {
         assertNull(NewMessage.favouriteWarning("c:0", null))
         assertNull(NewMessage.favouriteWarning("d:aaaaaaaaaaaa", contact("aaaaaaaaaaaa", "Ann", favourite = true)))
