@@ -16,6 +16,9 @@ class DraftsTest {
         // "W0RMT" and ": " take 7 of the 160 bytes.
         assertEquals(153, Drafts.limit("c:0", "W0RMT"))
         assertEquals(160, Drafts.limit("d:a1b2c3d4e5f6", "W0RMT"))
+        // Before the first sync: room for the longest name.
+        assertEquals(126, Drafts.limit("c:0", null))
+        assertEquals(145, Drafts.limit("c:0", "🔥W0RMT-T1n"))
     }
 
     @Test

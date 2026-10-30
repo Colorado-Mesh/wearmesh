@@ -452,9 +452,13 @@ class MainActivity : ComponentActivity() {
                     to = entry.arguments?.getString("to"),
                     selfName = remember { Prefs.of(this@MainActivity).getString(Prefs.SELF_NAME, null) },
                     quickReplies = quickReplies,
+                    // The screen closes once the message is stored to send; if Bluetooth permission is
+                    // refused, it stays, with the text, so nothing typed is lost.
                     onSend = { body ->
-                        withPermissions { Outbox.send(this@MainActivity, key, body) }
-                        nav.popBackStack()
+                        withPermissions {
+                            Outbox.send(this@MainActivity, key, body)
+                            nav.popBackStack()
+                        }
                     },
                 )
             }
@@ -473,8 +477,10 @@ class MainActivity : ComponentActivity() {
                             nav.navigate(replyRoute(shown.conversation, title, to))
                         },
                         onRetry = {
-                            withPermissions { Outbox.retry(this@MainActivity, shown.id) }
-                            nav.popBackStack()
+                            withPermissions {
+                                Outbox.retry(this@MainActivity, shown.id)
+                                nav.popBackStack()
+                            }
                         },
                     )
                 }
@@ -497,7 +503,12 @@ class MainActivity : ComponentActivity() {
                 } else {
                     QuickReplyScreen(
                         reply = reply,
-                        onChange = { text -> saveQuickReplies(QuickReplies.change(quickReplies, index, text)) },
+                        // Back to the list: a change that repeats another reply removes one, which
+                        // moves the replies after it up, so this index may now be another reply.
+                        onChange = { text ->
+                            saveQuickReplies(QuickReplies.change(quickReplies, index, text))
+                            nav.popBackStack()
+                        },
                         onRemove = {
                             saveQuickReplies(QuickReplies.remove(quickReplies, index))
                             nav.popBackStack()

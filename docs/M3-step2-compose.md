@@ -9,7 +9,7 @@ Replying from the watch, as decided for M3 (29 October 2026). Sending itself is 
 - **A quick reply sends at once**, without a preview (decided for M3), and the screen closes.
 - **Replying to one person on a channel:** tap their message, then **Reply to Ann**. The text starts with `@[Ann]`, as the MeshCore apps write it, which notifies them if their app does mentions. Tapping a message in a direct conversation offers **Reply**.
 - **Retry:** tap a message of yours that failed, then **Retry**. It is sent again as if just written.
-- **A clearer failure.** A direct message the radio refuses, to a node the radio does not list (step 1 found its contact list full and dropping old contacts), shows **Failed: contact not on radio**, and the log says so. Getting the contact back on the radio (an advert, or the phone app) and marking it a favourite there keeps it.
+- **A clearer failure.** A direct message the radio refuses because it has no contact for the recipient (its error 2, which meshcore-kotlin now passes up; step 1 found the list full and dropping old contacts) shows **Failed: contact not on radio**, and the log says so. Any other refusal is plain **Failed**, with the radio's error code in the log. Getting the contact back on the radio (an advert, or the phone app) and marking it a favourite there keeps it.
 - **Settings › Quick replies:** the starting set is OK, Yes, No, On my way, Copy, Call me, 73. Tap one to **Change** or **Remove** it; **Add** puts a new one at the end (12 at most); **Back to the starting set** undoes all changes. Changing and adding use the keyboard: Wear OS cannot hand its text screen words to edit, so a change is typed afresh.
 
 ## Contacts in the log
@@ -25,7 +25,7 @@ The favourite mark is bit 0 of the contact's flags on the radio, as the MeshCore
 
 ## The byte limit
 
-MeshCore carries 160 bytes of UTF-8 text. On a channel the radio puts its node name and ": " in front inside the same 160, so a radio named `🔥W0RMT-T1n` (14 bytes) leaves 144 for the message; a direct message has all 160. Most emoji take 4 bytes, accented letters 2, and a reply's `@[Name] ` counts too.
+MeshCore carries 160 bytes of UTF-8 text. On a channel the radio puts its node name and ": " in front inside the same 160, so a radio named `🔥W0RMT-T1n` (13 bytes: 4 for the emoji, 9 for the rest) leaves 145 for the message; a direct message has all 160. Before the first sync, when the watch does not yet know the radio's name, a channel allows for the longest name a node can have (32 bytes), leaving 126. Most emoji take 4 bytes, accented letters 2, and a reply's `@[Name] ` counts too.
 
 ## Testing on the watch
 

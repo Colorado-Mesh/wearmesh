@@ -1,6 +1,7 @@
 package org.coloradomesh.wearmesh.data
 
 import org.coloradomesh.meshcore.protocol.Channel
+import org.coloradomesh.meshcore.protocol.CompanionClient
 import org.coloradomesh.meshcore.protocol.Contact
 import org.coloradomesh.meshcore.protocol.DirectOutcome
 import org.junit.Assert.assertEquals
@@ -123,11 +124,12 @@ class OutboxSenderTest {
         assertEquals(listOf("d:a1b2c3d4e5f6 On my way", "d:a1b2c3d4e5f6 Copy", "d:0000000000ff Yes"), radio.sent)
         sender.onDirectResult(100, DirectOutcome.DELIVERED)
         sender.onDirectResult(101, DirectOutcome.UNCONFIRMED)
+        sender.onDirectRefused(102, CompanionClient.ERROR_NOT_FOUND)
         sender.onDirectResult(102, DirectOutcome.REFUSED)
         runWrites()
         assertEquals(OutgoingStatus.DELIVERED, store.statuses[delivered])
         assertEquals(OutgoingStatus.UNCONFIRMED, store.statuses[unconfirmed])
-        // The store has no such contact: the radio dropped it, or never had it.
+        // The radio says it has no such contact.
         assertEquals(OutgoingStatus.NO_CONTACT, store.statuses[refused])
         assertTrue(log.last().endsWith("failed: your radio does not have this contact (its list may be full)"))
     }
@@ -255,14 +257,15 @@ class OutboxSenderTest {
     private lateinit var lateSender: OutboxSender
 
     @Test
-    fun aRefusedDirectMessageToAKnownContactIsFailed() {
-        store.contacts.add("a1b2c3d4e5f6")
+    fun aDirectMessageRefusedForAnotherReasonIsFailed() {
         val id = write("d:a1b2c3d4e5f6", "Copy")
         sender.sendPending()
         runWrites()
+        sender.onDirectRefused(100, null)
         sender.onDirectResult(100, DirectOutcome.REFUSED)
         runWrites()
         assertEquals(OutgoingStatus.FAILED, store.statuses[id])
+        assertTrue(log.last().endsWith("failed: the radio would not send it, or did not answer"))
     }
 
     @Test

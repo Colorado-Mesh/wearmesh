@@ -243,6 +243,11 @@ class RoomMessageStoreTest {
         assertTrue(store.retryOutgoing(id, 1_800_000_120_000))
         assertEquals(listOf(OutgoingMessage(id, "d:a1b2c3d4e5f6", "Copy", 1_800_000_120_000)), store.pendingOutgoing())
         assertFalse(other.retryOutgoing(id, 1_800_000_180_000))
+
+        val failed = store.addOutgoing("c:0", "W0RMT", "OK", 1_800_000_060_000)
+        store.setOutgoingStatus(failed, OutgoingStatus.FAILED)
+        assertTrue(store.retryOutgoing(failed, 1_800_000_200_000))
+        assertEquals("SENDING", db.dao().messages(address, "c:0").single().status)
     }
 
     @Test

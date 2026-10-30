@@ -71,7 +71,8 @@ class SyncRecorder(
             store.saveContacts(batch, readAt)
             if (sweep) {
                 for (gone in store.dropContactsNotSeenSince(readAt)) log(Favourites.dropped(gone))
-                log(Favourites.summary(batch.size, store.favouriteNames()))
+                // A node heard advertising during the read can come twice; the store keeps one of each.
+                log(Favourites.summary(batch.distinctBy { it.publicKeyHex }.size, store.favouriteNames()))
             }
             store.setContactsSince(lastModified)
         }

@@ -15,13 +15,20 @@ object Drafts {
         return if (to.isNullOrBlank()) trimmed else "@[$to] $trimmed"
     }
 
-    /** The most bytes a message in [conversation] can take. */
+    /**
+     * The most bytes a message in [conversation] can take. Before the radio's name is known (no
+     * sync yet), a channel allows for the longest name a node can have.
+     */
     fun limit(conversation: String, selfName: String?): Int =
         if (conversation.startsWith("d:")) {
             CompanionFrames.MAX_DIRECT_TEXT_BYTES
         } else {
-            CompanionFrames.MAX_CHANNEL_TEXT_BYTES - (selfName?.toByteArray(Charsets.UTF_8)?.size ?: 0) - 2
+            val name = selfName?.takeIf { it.isNotEmpty() }?.toByteArray(Charsets.UTF_8)?.size ?: MAX_NAME_BYTES
+            CompanionFrames.MAX_CHANNEL_TEXT_BYTES - name - 2
         }
+
+    /** The longest node name MeshCore keeps. */
+    private const val MAX_NAME_BYTES = 32
 
     fun bytes(body: String): Int = body.toByteArray(Charsets.UTF_8).size
 

@@ -1,5 +1,6 @@
 package org.coloradomesh.wearmesh.data
 
+import org.coloradomesh.meshcore.protocol.CompanionClient
 import org.coloradomesh.meshcore.protocol.DirectOutcome
 import java.util.concurrent.Executor
 
@@ -61,6 +62,9 @@ class OutboxSender(
 
     /** Refills queued on [writer] and not yet run: the sender is not idle while one waits. */
     private var refills = 0
+
+    /** The radio's error code for each refused direct message, by the shared code's id, until its result comes. */
+    private val refusedWith = HashMap<Long, Int?>()
 
     /** Messages ended so far by this sender, for the log. */
     @Volatile
@@ -156,14 +160,24 @@ class OutboxSender(
         if (accepted) end(message, OutgoingStatus.SENT, null) else end(message, OutgoingStatus.FAILED, "the radio would not send it")
     }
 
+    /** From the protocol client: why the radio refused the direct message [id], just before its result. */
+    fun onDirectRefused(id: Long, errorCode: Int?) {
+        synchronized(lock) { refusedWith[id] = errorCode }
+    }
+
     /** From the protocol client: how a direct message ended. */
     fun onDirectResult(id: Long, outcome: DirectOutcome) {
-        val message = synchronized(lock) { directsWaiting.remove(id) } ?: return
+        val (message, code) = synchronized(lock) { directsWaiting.remove(id) to refusedWith.remove(id) }
+        if (message == null) return
         when (outcome) {
             DirectOutcome.DELIVERED -> end(message, OutgoingStatus.DELIVERED, null)
             DirectOutcome.UNCONFIRMED -> end(message, OutgoingStatus.UNCONFIRMED, "no acknowledgement after every try")
-            // Most often a contact the radio has dropped (its list is full) or never had.
-            DirectOutcome.REFUSED -> end(message, OutgoingStatus.FAILED, "the radio would not send it", checkContact = true)
+            // Step 1 found the radio's contact list full and dropping contacts, people being messaged among them.
+            DirectOutcome.REFUSED -> if (code == CompanionClient.ERROR_NOT_FOUND) {
+                end(message, OutgoingStatus.NO_CONTACT, "your radio does not have this contact (its list may be full)")
+            } else {
+                end(message, OutgoingStatus.FAILED, "the radio would not send it" + (code?.let { " (error $it)" } ?: ", or did not answer"))
+            }
         }
     }
 
@@ -189,9 +203,9 @@ class OutboxSender(
     /** Whether any message is with the radio now. */
     fun busy(): Boolean = synchronized(lock) { inFlight.isNotEmpty() }
 
-    private fun end(message: OutgoingMessage, status: OutgoingStatus, why: String?, checkContact: Boolean = false) {
+    private fun end(message: OutgoingMessage, status: OutgoingStatus, why: String?) {
         synchronized(lock) { inFlight.remove(message.id) }
-        record(message, status, why, checkContact)
+        record(message, status, why)
         val again = synchronized(lock) {
             (more && !finished).also {
                 if (it) {
@@ -204,24 +218,15 @@ class OutboxSender(
         runIfIdle()
     }
 
-    /**
-     * Records how [message] ended, on [writer]. With [checkContact], a refused direct message to a
-     * node the store has no contact for is [OutgoingStatus.NO_CONTACT]: the store holds what the
-     * radio last listed.
-     */
-    private fun record(message: OutgoingMessage, status: OutgoingStatus, why: String?, checkContact: Boolean = false) {
+    private fun record(message: OutgoingMessage, status: OutgoingStatus, why: String?) {
         synchronized(lock) { done.add(doneKey(message)) }
         ended++
-        val direct = message.conversation.startsWith("d:")
-        val what = if (direct) "Direct message to ${message.conversation.removePrefix("d:")}" else
+        val what = if (message.conversation.startsWith("d:")) "Direct message to ${message.conversation.removePrefix("d:")}" else
             "Message on channel ${message.conversation.removePrefix("c:")}"
+        log("Outbox: $what ${describe(status)}" + (why?.let { ": $it" } ?: ""))
         writer.execute {
             try {
-                val missing = checkContact && direct && !store.hasContact(message.conversation.removePrefix("d:"))
-                val final = if (missing) OutgoingStatus.NO_CONTACT else status
-                val reason = if (missing) "your radio does not have this contact (its list may be full)" else why
-                log("Outbox: $what ${describe(final)}" + (reason?.let { ": $it" } ?: ""))
-                store.setOutgoingStatus(message.id, final)
+                store.setOutgoingStatus(message.id, status)
             } catch (e: Exception) {
                 log("Outbox: could not record a message's status (${e.message})")
             }

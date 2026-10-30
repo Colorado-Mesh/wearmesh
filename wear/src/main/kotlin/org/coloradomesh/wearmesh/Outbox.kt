@@ -32,19 +32,28 @@ object Outbox {
         startSending(app)
     }
 
-    /** Sends the failed message [id] again, as if just written. Call on the main thread. */
+    /**
+     * Sends the failed message [id] again, as if just written. Only a message still failed starts
+     * a connection, so a second tap on Retry opens none. Call on the main thread.
+     */
     fun retry(context: Context, id: Long) {
         val app = context.applicationContext
         val radio = Prefs.of(app).getString(Prefs.RADIO_ADDRESS, null) ?: return
         val store = Storage.store(app, radio)
         val at = System.currentTimeMillis()
         Storage.later {
-            if (!store.retryOutgoing(id, at)) SpikeLog.log("Outbox: that message is no longer failed; not sent again")
+            if (store.retryOutgoing(id, at)) {
+                startSending(app)
+            } else {
+                SpikeLog.log("Outbox: that message is no longer failed; not sent again")
+            }
         }
-        startSending(app)
     }
 
-    /** Each way reads the outbox on the storage thread, after anything queued before it is written. */
+    /**
+     * Each way reads the outbox on the storage thread, after anything queued before it is written.
+     * Starting a service needs the app on screen, which it is when Send or Retry is tapped.
+     */
     private fun startSending(app: Context) {
         try {
             if (SpikeState.state.value.running) SpikeService.sendPending(app) else CheckIn.send(app)
