@@ -252,4 +252,22 @@ class RoomMessageStoreTest {
         assertFalse(store.hasContact("bbbbbbbbbbbb"))
         assertFalse(other.hasContact("aaaaaaaaaaaa"))
     }
+
+    @Test
+    fun aFullReadReportsTheFavouritesAndConversationContactsItDrops() {
+        val favourite = contact('a', "Ann").copy(flags = Contact.FLAG_FAVOURITE)
+        store.saveContacts(listOf(favourite, contact('b', "Bo"), contact('c', "Cy")), readAt = 1_800_000_000_000)
+        store.addMessage(message("hi", conversation = "d:bbbbbbbbbbbb", sender = ""))
+        assertEquals(listOf("Ann"), store.favouriteNames())
+
+        // The next full read lists only Cy.
+        store.saveContacts(listOf(contact('c', "Cy")), readAt = 1_800_003_600_000)
+        val dropped = store.dropContactsNotSeenSince(1_800_003_600_000)
+        assertEquals(
+            setOf(DroppedContact("Ann", "aaaaaaaaaaaa", favourite = true), DroppedContact("Bo", "bbbbbbbbbbbb", favourite = false)),
+            dropped.toSet(),
+        )
+        assertFalse(store.hasContact("aaaaaaaaaaaa"))
+        assertTrue(store.favouriteNames().isEmpty())
+    }
 }

@@ -21,7 +21,8 @@ class OutboxSenderTest {
         override fun open() {}
         override fun forget() {}
         override fun saveContacts(contacts: List<Contact>, readAt: Long) {}
-        override fun dropContactsNotSeenSince(readAt: Long) {}
+        override fun dropContactsNotSeenSince(readAt: Long) = emptyList<DroppedContact>()
+        override fun favouriteNames() = emptyList<String>()
         override fun setContactsSince(since: Long) {}
         override fun saveChannels(channels: List<Channel>, unanswered: Set<Int>) = 0
         override fun markFullRead(at: Long) {}

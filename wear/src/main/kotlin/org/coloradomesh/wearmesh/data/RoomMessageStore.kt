@@ -25,12 +25,20 @@ class RoomMessageStore(private val db: WearMeshDatabase, override val address: S
         if (contacts.isEmpty()) return
         dao.saveContacts(
             contacts.map {
-                ContactRow(address, it.publicKeyHex, it.publicKeyHex.take(PREFIX_CHARS), it.name, it.type, it.lastAdvert, readAt)
+                ContactRow(address, it.publicKeyHex, it.publicKeyHex.take(PREFIX_CHARS), it.name, it.type, it.lastAdvert, readAt, it.isFavourite)
             },
         )
     }
 
-    override fun dropContactsNotSeenSince(readAt: Long) = dao.dropContactsNotSeenSince(address, readAt)
+    override fun dropContactsNotSeenSince(readAt: Long): List<DroppedContact> = db.runInTransaction(
+        Callable {
+            val notable = dao.notableNotSeenSince(address, readAt).map { DroppedContact(it.name, it.prefix, it.favourite) }
+            dao.dropContactsNotSeenSince(address, readAt)
+            notable
+        },
+    )
+
+    override fun favouriteNames(): List<String> = dao.favouriteNames(address)
 
     override fun setContactsSince(since: Long) = dao.setContactsSince(address, since)
 

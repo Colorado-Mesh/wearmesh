@@ -52,6 +52,9 @@ enum class OutgoingStatus {
     NO_CONTACT,
 }
 
+/** A contact the radio stopped listing, for the log. */
+data class DroppedContact(val name: String, val prefix: String, val favourite: Boolean)
+
 /** A message this watch has still to send. */
 data class OutgoingMessage(
     val id: Long,
@@ -88,8 +91,14 @@ interface MessageStore {
     /** Adds or updates these contacts, marking them seen at [readAt]. */
     fun saveContacts(contacts: List<Contact>, readAt: Long)
 
-    /** After a full contact list read at [readAt]: drops contacts the radio no longer has. */
-    fun dropContactsNotSeenSince(readAt: Long)
+    /**
+     * After a full contact list read at [readAt]: drops contacts the radio no longer has, and
+     * returns those of them that are favourites or have a direct-message conversation.
+     */
+    fun dropContactsNotSeenSince(readAt: Long): List<DroppedContact>
+
+    /** The names of the contacts marked as favourites on the radio, as last read. */
+    fun favouriteNames(): List<String>
 
     fun setContactsSince(since: Long)
 

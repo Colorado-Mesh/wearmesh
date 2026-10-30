@@ -13,7 +13,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  */
 @Database(
     entities = [RadioRow::class, ChannelRow::class, ContactRow::class, MessageRow::class],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class WearMeshDatabase : RoomDatabase() {
@@ -33,12 +33,19 @@ abstract class WearMeshDatabase : RoomDatabase() {
             }
         }
 
+        /** Version 4 keeps each contact's favourite mark from the radio. */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `contacts` ADD COLUMN `favourite` INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         @Volatile
         private var instance: WearMeshDatabase? = null
 
         fun get(context: Context): WearMeshDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, WearMeshDatabase::class.java, FILE)
-                .addMigrations(MIGRATION_2_3)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
                 // Only for a version with no migration (1, from before per-radio history): the
                 // store starts afresh, and the radio's queue and the next full read refill it.
                 .fallbackToDestructiveMigration()

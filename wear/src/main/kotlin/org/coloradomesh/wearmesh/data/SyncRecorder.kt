@@ -69,7 +69,10 @@ class SyncRecorder(
         val sweep = plan.fullRead && !contactsSwept
         write {
             store.saveContacts(batch, readAt)
-            if (sweep) store.dropContactsNotSeenSince(readAt)
+            if (sweep) {
+                for (gone in store.dropContactsNotSeenSince(readAt)) log(Favourites.dropped(gone))
+                log(Favourites.summary(batch.size, store.favouriteNames()))
+            }
             store.setContactsSince(lastModified)
         }
         if (sweep) {

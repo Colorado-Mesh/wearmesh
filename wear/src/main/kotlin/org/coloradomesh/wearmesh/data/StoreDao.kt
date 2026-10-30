@@ -34,6 +34,19 @@ interface StoreDao {
     @Query("DELETE FROM contacts WHERE radio = :radio AND seen_at < :readAt")
     fun dropContactsNotSeenSince(radio: String, readAt: Long)
 
+    /**
+     * Contacts the radio did not list in the read at [readAt] that matter to the user: favourites,
+     * and nodes with a direct-message conversation. Read before they are dropped, for the log.
+     */
+    @Query(
+        "SELECT * FROM contacts c WHERE c.radio = :radio AND c.seen_at < :readAt AND (c.favourite = 1 OR EXISTS " +
+            "(SELECT 1 FROM messages m WHERE m.radio = c.radio AND m.conversation = 'd:' || c.prefix))",
+    )
+    fun notableNotSeenSince(radio: String, readAt: Long): List<ContactRow>
+
+    @Query("SELECT name FROM contacts WHERE radio = :radio AND favourite = 1 ORDER BY name")
+    fun favouriteNames(radio: String): List<String>
+
     @Query("SELECT * FROM channels WHERE radio = :radio ORDER BY slot")
     fun channels(radio: String): List<ChannelRow>
 
