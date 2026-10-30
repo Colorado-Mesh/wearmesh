@@ -79,7 +79,7 @@ class MainActivity : ComponentActivity() {
     private var offerAnswered by mutableStateOf(false)
 
     /** A conversation to open, from a tapped notification: radio, conversation, title. */
-    private var toOpen by mutableStateOf<Triple<String, String, String>?>(null)
+    private var toOpen by mutableStateOf<OpenRequest?>(null)
 
     /** Whether this activity has already taken a notification's conversation from its intent. */
     private var openedFromNotification = false
@@ -138,11 +138,16 @@ class MainActivity : ComponentActivity() {
         if (intent == null || (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0) return
         val radio = intent.getStringExtra(Notifier.EXTRA_RADIO) ?: return
         val conversation = intent.getStringExtra(Notifier.EXTRA_CONVERSATION) ?: return
-        toOpen = Triple(radio, conversation, intent.getStringExtra(Notifier.EXTRA_TITLE) ?: conversation)
+        val quick = intent.getBooleanExtra(Notifier.EXTRA_QUICK_REPLY, false)
+        toOpen = OpenRequest(radio, conversation, intent.getStringExtra(Notifier.EXTRA_TITLE) ?: conversation, quick)
         openedFromNotification = true
+        // Quick reply comes from a notification the app does not take down by opening the
+        // conversation underneath, since the reply screen is on top of it.
+        if (quick) Notifier.dismiss(this, radio, conversation)
         intent.removeExtra(Notifier.EXTRA_RADIO)
         intent.removeExtra(Notifier.EXTRA_CONVERSATION)
         intent.removeExtra(Notifier.EXTRA_TITLE)
+        intent.removeExtra(Notifier.EXTRA_QUICK_REPLY)
     }
 
     override fun onStart() {
@@ -335,10 +340,14 @@ class MainActivity : ComponentActivity() {
         Prefs.of(this).edit().putString(Prefs.QUICK_REPLIES, QuickReplies.format(replies)).apply()
     }
 
-    private fun replyRoute(conversation: String, title: String, to: String?): String {
+    private fun replyRoute(conversation: String, title: String, to: String?, quick: Boolean = false): String {
         val base = "$REPLY/${Uri.encode(conversation)}/${Uri.encode(title)}"
-        return if (to == null) base else "$base?to=${Uri.encode(to)}"
+        val query = listOfNotNull(to?.let { "to=${Uri.encode(it)}" }, "quick=true".takeIf { quick })
+        return if (query.isEmpty()) base else "$base?${query.joinToString("&")}"
     }
+
+    /** A conversation a tapped notification asks to open, and whether at its quick replies. */
+    private data class OpenRequest(val radio: String, val conversation: String, val title: String, val quick: Boolean)
 
     private fun answerOffer(switch: Boolean) {
         Mode.markPromptDone(this)
@@ -384,9 +393,12 @@ class MainActivity : ComponentActivity() {
         LaunchedEffect(toOpen) {
             val target = toOpen ?: return@LaunchedEffect
             toOpen = null
-            if (target.first == radioInUse) {
+            if (target.radio == radioInUse) {
                 nav.navigate(HOME) { popUpTo(nav.graph.id) { inclusive = true } }
-                openConversation(target.second, target.third)
+                openConversation(target.conversation, target.title)
+                // Quick reply: the quick replies straight away, over the conversation, so sending
+                // one lands on the conversation.
+                if (target.quick) nav.navigate(replyRoute(target.conversation, target.title, null, quick = true))
             }
         }
 
@@ -452,14 +464,19 @@ class MainActivity : ComponentActivity() {
             }
 
             composable(
-                "$REPLY/{key}/{title}?to={to}",
-                arguments = listOf(navArgument("to") { type = NavType.StringType; nullable = true; defaultValue = null }),
+                "$REPLY/{key}/{title}?to={to}&quick={quick}",
+                arguments = listOf(
+                    navArgument("to") { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument("quick") { type = NavType.BoolType; defaultValue = false },
+                ),
             ) { entry ->
                 val key = entry.arguments?.getString("key").orEmpty()
                 ReplyScreen(
                     conversation = key,
                     title = entry.arguments?.getString("title").orEmpty(),
                     to = entry.arguments?.getString("to"),
+                    // From a notification's Quick reply: the quick replies, without dictation first.
+                    startWithDictation = entry.arguments?.getBoolean("quick") != true,
                     selfName = remember { Prefs.of(this@MainActivity).getString(Prefs.SELF_NAME, null) },
                     quickReplies = quickReplies,
                     // The screen closes once the message is stored to send; if Bluetooth permission is
