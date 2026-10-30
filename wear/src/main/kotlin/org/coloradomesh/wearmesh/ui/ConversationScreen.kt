@@ -1,5 +1,6 @@
 package org.coloradomesh.wearmesh.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -27,6 +28,7 @@ import org.coloradomesh.wearmesh.data.MessageRow
  * One conversation, oldest message at the top and newest at the bottom, opened at the newest.
  * The crown scrolls. [onSeen] runs when it opens and again as each new message arrives, to mark
  * them read; keyed on the newest message, since a full conversation stays at 100 messages.
+ * Reply comes after the newest message; tapping a message replies to its sender (M3 step 2).
  */
 @Composable
 fun ConversationScreen(
@@ -37,8 +39,9 @@ fun ConversationScreen(
     notifyOn: Boolean,
     onSeen: () -> Unit,
     onToggleNotify: () -> Unit,
-    /** M3 step 1: sends a fixed test message here, to prove sending before the compose screens. */
-    onSendTest: () -> Unit,
+    onReply: () -> Unit,
+    /** A tapped message: to reply to its sender, or retry one of the watch's that failed. */
+    onOpenMessage: (MessageRow) -> Unit,
 ) {
     val state = rememberScalingLazyListState()
     var placed by remember { mutableStateOf(false) }
@@ -53,7 +56,8 @@ fun ConversationScreen(
     ScreenList(state) {
         item { ListHeader { Text(title, maxLines = 1) } }
         if (messages.isEmpty()) item { Note("No messages yet") }
-        items(messages, key = { it.id }) { message -> MessageItem(message, selfName, now) }
+        items(messages, key = { it.id }) { message -> MessageItem(message, selfName, now) { onOpenMessage(message) } }
+        item { WideChip("Reply") { onReply() } }
         item {
             WideChip(
                 label = if (notifyOn) "Notifications: on" else "Notifications: off",
@@ -61,15 +65,13 @@ fun ConversationScreen(
                 secondary = true,
             ) { onToggleNotify() }
         }
-        item { WideChip("Send test message", detail = "\"${SentStatus.TEST_TEXT}\"", secondary = true) { onSendTest() } }
-        item { Note("Replies come in the next version") }
     }
 }
 
 @Composable
-private fun MessageItem(message: MessageRow, selfName: String?, now: Long) {
+private fun MessageItem(message: MessageRow, selfName: String?, now: Long, onClick: () -> Unit) {
     val accent = MaterialTheme.colors.primary
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+    Column(modifier = Modifier.fillMaxWidth().clickable { onClick() }.padding(vertical = 4.dp)) {
         val sender = if (message.outgoing) "You" else message.sender
         if (sender.isNotEmpty()) {
             Text(sender, style = MaterialTheme.typography.caption1, fontWeight = FontWeight.Bold, maxLines = 1)

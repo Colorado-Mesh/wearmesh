@@ -45,6 +45,8 @@ class SyncRecorderTest {
         override fun addOutgoing(conversation: String, sender: String, body: String, at: Long) = -1L
         override fun pendingOutgoing() = emptyList<OutgoingMessage>()
         override fun setOutgoingStatus(id: Long, status: OutgoingStatus) {}
+        override fun retryOutgoing(id: Long, at: Long) = false
+        override fun hasContact(prefix: String) = false
     }
 
     private val store = FakeStore()

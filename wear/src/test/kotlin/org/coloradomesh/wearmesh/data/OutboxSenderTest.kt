@@ -37,6 +37,14 @@ class OutboxSenderTest {
         override fun setOutgoingStatus(id: Long, status: OutgoingStatus) {
             statuses[id] = status
         }
+        val contacts = HashSet<String>()
+        override fun hasContact(prefix: String) = prefix in contacts
+        override fun retryOutgoing(id: Long, at: Long): Boolean {
+            if (statuses[id] != OutgoingStatus.FAILED && statuses[id] != OutgoingStatus.NO_CONTACT) return false
+            statuses[id] = OutgoingStatus.SENDING
+            messages[id] = messages.getValue(id).copy(createdAt = at)
+            return true
+        }
     }
 
     /** Records what was handed to the radio; direct messages get ids from 100 up. */
@@ -118,7 +126,9 @@ class OutboxSenderTest {
         runWrites()
         assertEquals(OutgoingStatus.DELIVERED, store.statuses[delivered])
         assertEquals(OutgoingStatus.UNCONFIRMED, store.statuses[unconfirmed])
-        assertEquals(OutgoingStatus.FAILED, store.statuses[refused])
+        // The store has no such contact: the radio dropped it, or never had it.
+        assertEquals(OutgoingStatus.NO_CONTACT, store.statuses[refused])
+        assertTrue(log.last().endsWith("failed: your radio does not have this contact (its list may be full)"))
     }
 
     @Test
@@ -242,4 +252,34 @@ class OutboxSenderTest {
     }
 
     private lateinit var lateSender: OutboxSender
+
+    @Test
+    fun aRefusedDirectMessageToAKnownContactIsFailed() {
+        store.contacts.add("a1b2c3d4e5f6")
+        val id = write("d:a1b2c3d4e5f6", "Copy")
+        sender.sendPending()
+        runWrites()
+        sender.onDirectResult(100, DirectOutcome.REFUSED)
+        runWrites()
+        assertEquals(OutgoingStatus.FAILED, store.statuses[id])
+    }
+
+    @Test
+    fun aRetriedMessageIsSentAgainOnTheSameConnection() {
+        val id = write("c:0", "OK")
+        sender.sendPending()
+        runWrites()
+        sender.onSendResult(0, "OK", accepted = false)
+        runWrites()
+        assertEquals(OutgoingStatus.FAILED, store.statuses[id])
+
+        now += 60_000
+        assertTrue(store.retryOutgoing(id, now))
+        sender.sendPending()
+        runWrites()
+        assertEquals(listOf("c:0 OK", "c:0 OK"), radio.sent)
+        sender.onSendResult(0, "OK", accepted = true)
+        runWrites()
+        assertEquals(OutgoingStatus.SENT, store.statuses[id])
+    }
 }

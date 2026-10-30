@@ -105,6 +105,10 @@ class RoomMessageStore(private val db: WearMeshDatabase, override val address: S
 
     override fun setOutgoingStatus(id: Long, status: OutgoingStatus) = dao.setStatus(address, id, status.name)
 
+    override fun retryOutgoing(id: Long, at: Long): Boolean = dao.retry(address, id, at) > 0
+
+    override fun hasContact(prefix: String): Boolean = dao.hasContact(address, prefix.lowercase())
+
     private companion object {
         const val PREFIX_CHARS = 12
     }

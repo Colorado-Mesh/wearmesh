@@ -13,6 +13,12 @@ class SentStatusTest {
         assertEquals("Delivered", SentStatus.label("DELIVERED"))
         assertEquals("Not confirmed", SentStatus.label("UNCONFIRMED"))
         assertEquals("Failed", SentStatus.label("FAILED"))
+        assertEquals("Failed: contact not on radio", SentStatus.label("NO_CONTACT"))
+    }
+
+    @Test
+    fun onlyFailuresCanBeRetried() {
+        assertEquals(listOf("FAILED", "NO_CONTACT"), listOf("SENDING", "SENT", "DELIVERED", "UNCONFIRMED", "FAILED", "NO_CONTACT", null).filter { SentStatus.canRetry(it) })
     }
 
     @Test

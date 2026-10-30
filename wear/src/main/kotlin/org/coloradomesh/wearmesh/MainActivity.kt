@@ -23,6 +23,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.navigation.SwipeDismissableNavHost
 import androidx.wear.compose.navigation.composable
@@ -44,11 +46,15 @@ import org.coloradomesh.wearmesh.ui.FindRadioScreen
 import org.coloradomesh.wearmesh.ui.ForgottenScreen
 import org.coloradomesh.wearmesh.ui.HomeRows
 import org.coloradomesh.wearmesh.ui.HomeScreen
+import org.coloradomesh.wearmesh.ui.MessageScreen
 import org.coloradomesh.wearmesh.ui.NotificationsScreen
 import org.coloradomesh.wearmesh.ui.NotifyRow
+import org.coloradomesh.wearmesh.ui.QuickReplies
+import org.coloradomesh.wearmesh.ui.QuickRepliesScreen
+import org.coloradomesh.wearmesh.ui.QuickReplyScreen
 import org.coloradomesh.wearmesh.ui.RadioScreen
 import org.coloradomesh.wearmesh.ui.RadiosScreen
-import org.coloradomesh.wearmesh.ui.SentStatus
+import org.coloradomesh.wearmesh.ui.ReplyScreen
 import org.coloradomesh.wearmesh.ui.SettingsScreen
 import org.coloradomesh.wearmesh.ui.SettingsState
 import org.coloradomesh.wearmesh.ui.WelcomeScreen
@@ -78,6 +84,9 @@ class MainActivity : ComponentActivity() {
     /** Whether the last radio forgotten was the one in use, which leaves the watch on Welcome. */
     private var forgotInUse by mutableStateOf(false)
 
+    /** The quick replies, as saved (M3 step 2). */
+    private var quickReplies by mutableStateOf(QuickReplies.DEFAULTS)
+
     /** What to do once permissions are granted. */
     private var afterPermissions: (() -> Unit)? = null
 
@@ -102,6 +111,7 @@ class MainActivity : ComponentActivity() {
         SyncStatus.load(this)
         Notifier.createChannels(this)
         Notifier.loadChoices(this, Radios.state.value?.chosen?.address)
+        quickReplies = QuickReplies.parse(Prefs.of(this).getString(Prefs.QUICK_REPLIES, null))
         // A notification's conversation opens once: not again when the activity is recreated
         // after opening it, nor when it is relaunched from Recents.
         if (savedInstanceState?.getBoolean(OPENED_FROM_NOTIFICATION) != true) openFrom(intent)
@@ -317,6 +327,16 @@ class MainActivity : ComponentActivity() {
         finishAndRemoveTask()
     }
 
+    private fun saveQuickReplies(replies: List<String>) {
+        quickReplies = replies
+        Prefs.of(this).edit().putString(Prefs.QUICK_REPLIES, QuickReplies.format(replies)).apply()
+    }
+
+    private fun replyRoute(conversation: String, title: String, to: String?): String {
+        val base = "$REPLY/${Uri.encode(conversation)}/${Uri.encode(title)}"
+        return if (to == null) base else "$base?to=${Uri.encode(to)}"
+    }
+
     private fun answerOffer(switch: Boolean) {
         Mode.markPromptDone(this)
         offerAnswered = true
@@ -416,12 +436,74 @@ class MainActivity : ComponentActivity() {
                     onToggleNotify = {
                         Notifier.setChoice(this@MainActivity, radioInUse, key, kind, !NotifyRules.isOn(key, kind, choices))
                     },
-                    onSendTest = {
-                        // The time makes each test its own message, so a second one is not taken for a double tap.
-                        val at = java.time.LocalTime.now().withNano(0)
-                        withPermissions { Outbox.send(this@MainActivity, key, "${SentStatus.TEST_TEXT} $at") }
+                    onReply = { nav.navigate(replyRoute(key, title, null)) },
+                    onOpenMessage = { message -> nav.navigate("$MESSAGE/${message.id}/${Uri.encode(title)}") },
+                )
+            }
+
+            composable(
+                "$REPLY/{key}/{title}?to={to}",
+                arguments = listOf(navArgument("to") { type = NavType.StringType; nullable = true; defaultValue = null }),
+            ) { entry ->
+                val key = entry.arguments?.getString("key").orEmpty()
+                ReplyScreen(
+                    conversation = key,
+                    title = entry.arguments?.getString("title").orEmpty(),
+                    to = entry.arguments?.getString("to"),
+                    selfName = remember { Prefs.of(this@MainActivity).getString(Prefs.SELF_NAME, null) },
+                    quickReplies = quickReplies,
+                    onSend = { body ->
+                        withPermissions { Outbox.send(this@MainActivity, key, body) }
+                        nav.popBackStack()
                     },
                 )
+            }
+
+            composable("$MESSAGE/{id}/{title}") { entry ->
+                val id = entry.arguments?.getString("id")?.toLongOrNull() ?: -1
+                val title = entry.arguments?.getString("title").orEmpty()
+                val message by remember(radioInUse, id) { dao.messageFlow(radioInUse, id) }.collectAsStateWithLifecycle(null)
+                val shown = message
+                if (shown != null) {
+                    MessageScreen(
+                        message = shown,
+                        now = now,
+                        onReply = { to ->
+                            nav.popBackStack()
+                            nav.navigate(replyRoute(shown.conversation, title, to))
+                        },
+                        onRetry = {
+                            withPermissions { Outbox.retry(this@MainActivity, shown.id) }
+                            nav.popBackStack()
+                        },
+                    )
+                }
+            }
+
+            composable(QUICK_REPLIES) {
+                QuickRepliesScreen(
+                    replies = quickReplies,
+                    onOpen = { index -> nav.navigate("$QUICK_REPLY/$index") },
+                    onAdd = { text -> saveQuickReplies(QuickReplies.add(quickReplies, text)) },
+                    onReset = { saveQuickReplies(QuickReplies.DEFAULTS) },
+                )
+            }
+
+            composable("$QUICK_REPLY/{index}") { entry ->
+                val index = entry.arguments?.getString("index")?.toIntOrNull() ?: -1
+                val reply = quickReplies.getOrNull(index)
+                if (reply == null) {
+                    LaunchedEffect(Unit) { nav.popBackStack() }
+                } else {
+                    QuickReplyScreen(
+                        reply = reply,
+                        onChange = { text -> saveQuickReplies(QuickReplies.change(quickReplies, index, text)) },
+                        onRemove = {
+                            saveQuickReplies(QuickReplies.remove(quickReplies, index))
+                            nav.popBackStack()
+                        },
+                    )
+                }
             }
 
             composable(RADIOS) {
@@ -520,6 +602,7 @@ class MainActivity : ComponentActivity() {
                     onInterval = { intervalMinutes = CheckIn.nextInterval(this@MainActivity) },
                     onAllowAlarms = { openSettingsPage(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, withPackage = true) },
                     onNotifications = { nav.navigate(NOTIFICATIONS) },
+                    onQuickReplies = { nav.navigate(QUICK_REPLIES) },
                     onAllowNotifications = { openNotificationSettings() },
                     onReadEverything = {
                         withPermissions { CheckIn.now(this@MainActivity, full = true) }
@@ -575,6 +658,10 @@ class MainActivity : ComponentActivity() {
         const val SETTINGS = "settings"
         const val DIAGNOSTICS = "diagnostics"
         const val NOTIFICATIONS = "notifications"
+        const val REPLY = "reply"
+        const val MESSAGE = "message"
+        const val QUICK_REPLIES = "quick-replies"
+        const val QUICK_REPLY = "quick-reply"
 
         /** No sync on opening the app if the last one finished this recently. */
         const val OPEN_SYNC_GAP_MS = 2 * 60_000L

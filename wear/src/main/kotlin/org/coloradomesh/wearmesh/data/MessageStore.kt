@@ -47,6 +47,9 @@ enum class OutgoingStatus {
 
     /** Not sent: the radio refused it, or it waited too long for a connection. */
     FAILED,
+
+    /** A direct message the radio refused, to a node it has no contact for (step 1 found its list full). */
+    NO_CONTACT,
 }
 
 /** A message this watch has still to send. */
@@ -117,6 +120,15 @@ interface MessageStore {
     fun pendingOutgoing(): List<OutgoingMessage>
 
     fun setOutgoingStatus(id: Long, status: OutgoingStatus)
+
+    /**
+     * Sends the failed message [id] again: it waits as if written at [at]. False when it is not
+     * failed (any more), so nothing is sent twice.
+     */
+    fun retryOutgoing(id: Long, at: Long): Boolean
+
+    /** Whether the radio's contact list, as last read, has a node whose key starts with [prefix]. */
+    fun hasContact(prefix: String): Boolean
 
     companion object {
         /** Decided for M2: the newest 100 messages per conversation. */

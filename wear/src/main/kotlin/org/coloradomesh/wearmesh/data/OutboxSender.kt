@@ -50,10 +50,11 @@ class OutboxSender(
     private val inFlight = HashSet<Long>()
 
     /**
-     * Row ids this sender has ended. Their new status is written after the fact, so a read of the
-     * waiting messages may still list one; this keeps it from being sent twice.
+     * Messages this sender has ended, by row id and time written. Their new status is written
+     * after the fact, so a read of the waiting messages may still list one; this keeps it from
+     * being sent twice. A message tried again (Retry) is written anew, so it is not in here.
      */
-    private val done = HashSet<Long>()
+    private val done = HashSet<String>()
     private val whenIdle = ArrayList<() -> Unit>()
     private var more = false
     private var finished = false
@@ -93,7 +94,7 @@ class OutboxSender(
         synchronized(lock) {
             if (refill) refills--
             for (message in pending) {
-                if (message.id in inFlight || message.id in done) continue
+                if (message.id in inFlight || doneKey(message) in done) continue
                 if (now - message.createdAt > STALE_MS) {
                     record(message, OutgoingStatus.FAILED, "not sent within ${STALE_MS / 60_000} min of writing it")
                     continue
@@ -161,7 +162,8 @@ class OutboxSender(
         when (outcome) {
             DirectOutcome.DELIVERED -> end(message, OutgoingStatus.DELIVERED, null)
             DirectOutcome.UNCONFIRMED -> end(message, OutgoingStatus.UNCONFIRMED, "no acknowledgement after every try")
-            DirectOutcome.REFUSED -> end(message, OutgoingStatus.FAILED, "the radio would not send it (is the contact on the radio?)")
+            // Most often a contact the radio has dropped (its list is full) or never had.
+            DirectOutcome.REFUSED -> end(message, OutgoingStatus.FAILED, "the radio would not send it", checkContact = true)
         }
     }
 
@@ -187,9 +189,9 @@ class OutboxSender(
     /** Whether any message is with the radio now. */
     fun busy(): Boolean = synchronized(lock) { inFlight.isNotEmpty() }
 
-    private fun end(message: OutgoingMessage, status: OutgoingStatus, why: String?) {
+    private fun end(message: OutgoingMessage, status: OutgoingStatus, why: String?, checkContact: Boolean = false) {
         synchronized(lock) { inFlight.remove(message.id) }
-        record(message, status, why)
+        record(message, status, why, checkContact)
         val again = synchronized(lock) {
             (more && !finished).also {
                 if (it) {
@@ -202,20 +204,31 @@ class OutboxSender(
         runIfIdle()
     }
 
-    private fun record(message: OutgoingMessage, status: OutgoingStatus, why: String?) {
-        synchronized(lock) { done.add(message.id) }
+    /**
+     * Records how [message] ended, on [writer]. With [checkContact], a refused direct message to a
+     * node the store has no contact for is [OutgoingStatus.NO_CONTACT]: the store holds what the
+     * radio last listed.
+     */
+    private fun record(message: OutgoingMessage, status: OutgoingStatus, why: String?, checkContact: Boolean = false) {
+        synchronized(lock) { done.add(doneKey(message)) }
         ended++
-        val what = if (message.conversation.startsWith("d:")) "Direct message to ${message.conversation.removePrefix("d:")}" else
+        val direct = message.conversation.startsWith("d:")
+        val what = if (direct) "Direct message to ${message.conversation.removePrefix("d:")}" else
             "Message on channel ${message.conversation.removePrefix("c:")}"
-        log("Outbox: $what ${describe(status)}" + (why?.let { ": $it" } ?: ""))
         writer.execute {
             try {
-                store.setOutgoingStatus(message.id, status)
+                val missing = checkContact && direct && !store.hasContact(message.conversation.removePrefix("d:"))
+                val final = if (missing) OutgoingStatus.NO_CONTACT else status
+                val reason = if (missing) "your radio does not have this contact (its list may be full)" else why
+                log("Outbox: $what ${describe(final)}" + (reason?.let { ": $it" } ?: ""))
+                store.setOutgoingStatus(message.id, final)
             } catch (e: Exception) {
                 log("Outbox: could not record a message's status (${e.message})")
             }
         }
     }
+
+    private fun doneKey(message: OutgoingMessage) = "${message.id}@${message.createdAt}"
 
     private fun runIfIdle() {
         if (synchronized(lock) { inFlight.isEmpty() && refills == 0 }) runWaiters()
@@ -233,7 +246,7 @@ class OutboxSender(
         OutgoingStatus.SENT -> "sent"
         OutgoingStatus.DELIVERED -> "delivered"
         OutgoingStatus.UNCONFIRMED -> "not confirmed"
-        OutgoingStatus.FAILED -> "failed"
+        OutgoingStatus.FAILED, OutgoingStatus.NO_CONTACT -> "failed"
     }
 
     companion object {

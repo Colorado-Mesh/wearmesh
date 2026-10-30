@@ -94,6 +94,19 @@ interface StoreDao {
     @Query("UPDATE messages SET status = :status WHERE radio = :radio AND id = :id AND outgoing = 1")
     fun setStatus(radio: String, id: Long, status: String)
 
+    /** A failed message waits to send again, as if written at [at]; returns the rows changed. */
+    @Query(
+        "UPDATE messages SET status = 'SENDING', received_at = :at " +
+            "WHERE radio = :radio AND id = :id AND outgoing = 1 AND status IN ('FAILED', 'NO_CONTACT')",
+    )
+    fun retry(radio: String, id: Long, at: Long): Int
+
+    @Query("SELECT EXISTS(SELECT 1 FROM contacts WHERE radio = :radio AND prefix = :prefix)")
+    fun hasContact(radio: String, prefix: String): Boolean
+
+    @Query("SELECT * FROM messages WHERE radio = :radio AND id = :id")
+    fun messageFlow(radio: String, id: Long): Flow<MessageRow?>
+
     @Query("SELECT name FROM contacts WHERE radio = :radio AND prefix = :prefix LIMIT 1")
     fun contactName(radio: String, prefix: String): String?
 
