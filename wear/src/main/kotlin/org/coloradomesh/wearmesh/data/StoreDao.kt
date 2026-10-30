@@ -47,6 +47,17 @@ interface StoreDao {
     @Query("SELECT name FROM contacts WHERE radio = :radio AND favourite = 1 ORDER BY name")
     fun favouriteNames(radio: String): List<String>
 
+    /** Companions (type 1) marked as favourites, by name; for New message. */
+    @Query("SELECT * FROM contacts WHERE radio = :radio AND type = 1 AND favourite = 1 ORDER BY name COLLATE NOCASE")
+    fun favouriteCompanionsFlow(radio: String): Flow<List<ContactRow>>
+
+    /** The [limit] companions heard most recently that are not favourites; for New message. */
+    @Query("SELECT * FROM contacts WHERE radio = :radio AND type = 1 AND favourite = 0 ORDER BY last_advert DESC LIMIT :limit")
+    fun recentCompanionsFlow(radio: String, limit: Int): Flow<List<ContactRow>>
+
+    @Query("SELECT * FROM contacts WHERE radio = :radio AND prefix = :prefix LIMIT 1")
+    fun contactFlow(radio: String, prefix: String): Flow<ContactRow?>
+
     @Query("SELECT * FROM channels WHERE radio = :radio ORDER BY slot")
     fun channels(radio: String): List<ChannelRow>
 
