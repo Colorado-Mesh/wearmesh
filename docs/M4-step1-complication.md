@@ -21,3 +21,5 @@ The first part of M4 (plan and decisions in the design doc's M4 plan, 30 October
 3. **Read it.** Open the conversation: the count goes back to the icon alone. Mark read on a notification does the same.
 4. **A quiet channel.** A Public message (notifications off) does not change the count; a mention of your radio on it still notifies, but counts only if that channel's notifications are on.
 5. **Long text.** On a face with a wide slot, the complication shows "Synced … ago", counting up, then "Live: Connected" after switching to Live.
+
+Checks 1 to 4 passed on 30 October 2026 (PR 20). Check 5 is not tested: no face on the watch has a wide slot. The Tile's status line (step 2) shows the same information.
