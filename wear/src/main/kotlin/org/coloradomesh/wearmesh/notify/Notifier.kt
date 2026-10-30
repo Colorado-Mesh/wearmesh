@@ -26,8 +26,9 @@ import org.coloradomesh.wearmesh.ui.QuickReplies
 
 /**
  * Message notifications (M2 step 4): one per conversation, showing its newest unread messages,
- * grouped under one summary that alone buzzes. Each has Reply, offering the quick replies with
- * voice and keyboard for anything else, and Mark read (M3 step 3, decided for M3: Reply on every
+ * grouped under one summary that alone buzzes. Each has Reply (voice, keyboard and emoji, as the
+ * watch shows it), Quick reply (the app's quick replies, which the watch does not show in Reply)
+ * and Mark read (M3 step 3, decided for M3: Reply on every
  * message notification). A message of the watch's that fails gets its own notification, with
  * Retry ([failed]). Which messages notify is [NotifyRules]; how often
  * a conversation buzzes is [AlertGate]. Direct messages and channels have their own Android
@@ -40,6 +41,9 @@ object Notifier {
     const val EXTRA_CONVERSATION = "org.coloradomesh.wearmesh.CONVERSATION"
     const val EXTRA_TITLE = "org.coloradomesh.wearmesh.TITLE"
     const val EXTRA_MESSAGE_ID = "org.coloradomesh.wearmesh.MESSAGE_ID"
+
+    /** With the conversation extras: open its quick replies, not just the conversation. */
+    const val EXTRA_QUICK_REPLY = "org.coloradomesh.wearmesh.QUICK_REPLY"
 
     /** The reply typed, spoken or chosen in a notification's Reply. */
     const val KEY_REPLY = "reply"
@@ -149,6 +153,7 @@ object Notifier {
                 .setAutoCancel(true)
                 .setContentIntent(openIntent(context, radio, conversation, title))
                 .addAction(replyAction(context, radio, conversation, title))
+                .addAction(quickReplyAction(context, radio, conversation, title))
                 .addAction(markReadAction(context, radio, conversation))
                 .build()
             if (gate.shouldAlert(conversation, now)) buzz = true
@@ -260,6 +265,30 @@ object Notifier {
             .addRemoteInput(input)
             .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
             .setShowsUserInterface(false)
+            .build()
+    }
+
+    /**
+     * Opens the app on this conversation's quick replies, one tap from sending. The Pixel Watch
+     * shows a reply action as emoji, voice and keyboard only, without the quick replies given to
+     * it as choices (found in the M3 field test), so this is how they are reached from a
+     * notification.
+     */
+    private fun quickReplyAction(context: Context, radio: String, conversation: String, title: String): NotificationCompat.Action {
+        val intent = Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            .putExtra(EXTRA_RADIO, radio)
+            .putExtra(EXTRA_CONVERSATION, conversation)
+            .putExtra(EXTRA_TITLE, title)
+            .putExtra(EXTRA_QUICK_REPLY, true)
+        val pending = PendingIntent.getActivity(
+            context,
+            idFor(radio, "quick|$conversation"),
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        return NotificationCompat.Action.Builder(R.drawable.ic_notification, "Quick reply", pending)
+            .setShowsUserInterface(true)
             .build()
     }
 

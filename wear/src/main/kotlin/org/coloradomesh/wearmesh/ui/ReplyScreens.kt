@@ -29,6 +29,8 @@ fun ReplyScreen(
     to: String?,
     selfName: String?,
     quickReplies: List<String>,
+    /** False to open on the quick replies (from a notification's Quick reply) rather than dictation. */
+    startWithDictation: Boolean = true,
     onSend: (String) -> Unit,
 ) {
     var draft by rememberSaveable { mutableStateOf<String?>(null) }
@@ -44,7 +46,7 @@ fun ReplyScreen(
         onMissing = { notice = "This watch has no keyboard screen" },
     )
     // Dictation first, once, when the screen opens; backing out of it leaves the choices here.
-    var opened by rememberSaveable { mutableStateOf(false) }
+    var opened by rememberSaveable { mutableStateOf(!startWithDictation) }
     LaunchedEffect(Unit) {
         if (!opened) {
             opened = true

@@ -4,7 +4,8 @@ Replying without opening the app, as decided for M3 (29 October 2026): **Reply**
 
 ## What it does
 
-- **Reply** on each conversation's notification opens the watch's reply screen, with the quick replies (as set in Settings › Quick replies) to tap, and voice, keyboard and emoji for anything else. The reply goes to the conversation: on a channel it carries no `@[name]`; tapping someone's message in the app does that.
+- **Reply** on each conversation's notification is shown by the watch as emoji, voice and keyboard icons. The quick replies are passed with it too, but the Pixel Watch does not show them, on the notification or in its keyboard (found in the M3 field test, 30 October).
+- **Quick reply** opens WearMesh on that conversation's quick replies (as set in Settings › Quick replies), without dictation first: one tap sends, and the conversation shows it. It takes the notification down. The reply goes to the conversation: on a channel it carries no `@[name]`; tapping someone's message in the app does that.
 - **Sending works as in the app:** over Live's link, or in Check-in mode over a connection opened at once, which Android allows for a short while after a tap on a notification.
 - **Replying marks the conversation read** and takes its notification down; **Mark read** does the same without replying.
 - **A reply over the byte limit** is not sent. A notification says so ("Not sent to #testing: Too long by 12 bytes") with the text, since the reply screen has no room to show and edit it; tapping it opens the conversation.
