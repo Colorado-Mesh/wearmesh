@@ -217,4 +217,21 @@ class RoomMessageStoreTest {
         other.setOutgoingStatus(id, OutgoingStatus.FAILED)
         assertEquals(listOf(id), store.pendingOutgoing().map { it.id })
     }
+
+    @Test
+    fun aMessageWaitingToSendIsNotTrimmed() {
+        val waiting = store.addOutgoing("c:0", "W0RMT", "OK", 1_800_000_060_000)
+        repeat(MessageStore.KEEP_PER_CONVERSATION + 5) { store.addMessage(message("m$it", sentAt = 1_700_000_000L + it)) }
+        assertEquals(listOf(waiting), store.pendingOutgoing().map { it.id })
+        assertEquals(MessageStore.KEEP_PER_CONVERSATION + 1, bodies().size)
+    }
+
+    @Test
+    fun aChangedChannelDropsItsWaitingMessagesAndSaysHowMany() {
+        store.saveChannels(listOf(Channel(3, "#testing", Channel.Kind.HASHTAG)))
+        store.addOutgoing("c:3", "W0RMT", "OK", 1_800_000_060_000)
+        assertEquals(0, store.saveChannels(listOf(Channel(3, "#testing", Channel.Kind.HASHTAG))))
+        assertEquals(1, store.saveChannels(listOf(Channel(3, "mesh-ops", Channel.Kind.PRIVATE))))
+        assertTrue(store.pendingOutgoing().isEmpty())
+    }
 }

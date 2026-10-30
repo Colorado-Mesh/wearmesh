@@ -9,6 +9,7 @@ class SentStatusTest {
     fun labels() {
         assertNull(SentStatus.label(null))
         assertEquals("Sending…", SentStatus.label("SENDING"))
+        assertEquals("Sent to radio", SentStatus.label("SENT"))
         assertEquals("Delivered", SentStatus.label("DELIVERED"))
         assertEquals("Not confirmed", SentStatus.label("UNCONFIRMED"))
         assertEquals("Failed", SentStatus.label("FAILED"))

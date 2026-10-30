@@ -23,7 +23,7 @@ class OutboxSenderTest {
         override fun saveContacts(contacts: List<Contact>, readAt: Long) {}
         override fun dropContactsNotSeenSince(readAt: Long) {}
         override fun setContactsSince(since: Long) {}
-        override fun saveChannels(channels: List<Channel>, unanswered: Set<Int>) {}
+        override fun saveChannels(channels: List<Channel>, unanswered: Set<Int>) = 0
         override fun markFullRead(at: Long) {}
         override fun addMessage(message: IncomingMessage) = true
         override fun counts() = StoreCounts(0, 0, 0, 0)
@@ -206,4 +206,40 @@ class OutboxSenderTest {
         runWrites()
         assertEquals(1, idle)
     }
+
+    @Test
+    fun notIdleWhileARefillWaitsOnTheWriter() {
+        (1..6).forEach { write("c:0", "m$it") }
+        var idle = 0
+        sender.sendPending { idle++ }
+        runWrites()
+        // All four end before the writer runs the refill queued after the first.
+        (1..4).forEach { sender.onSendResult(0, "m$it", accepted = true) }
+        assertEquals(0, idle)
+        runWrites()
+        assertEquals(6, radio.sent.size)
+        assertEquals(0, idle)
+        sender.onSendResult(0, "m5", accepted = true)
+        sender.onSendResult(0, "m6", accepted = true)
+        runWrites()
+        assertEquals(1, idle)
+    }
+
+    @Test
+    fun aDirectMessageTakenAsTheConnectionEndsIsNotConfirmed() {
+        val id = write("d:a1b2c3d4e5f6", "Copy")
+        val ending = object : OutboxSender.Port {
+            override fun sendChannelText(channelIndex: Int, text: String) {}
+            override fun sendDirectText(publicKeyHex: String, text: String): Long? {
+                lateSender.finish()
+                return 7
+            }
+        }
+        lateSender = OutboxSender(store, writer, ending, { log.add(it) }, { now })
+        lateSender.sendPending()
+        runWrites()
+        assertEquals(OutgoingStatus.UNCONFIRMED, store.statuses[id])
+    }
+
+    private lateinit var lateSender: OutboxSender
 }

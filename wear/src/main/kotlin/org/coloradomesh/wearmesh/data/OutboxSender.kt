@@ -58,6 +58,9 @@ class OutboxSender(
     private var more = false
     private var finished = false
 
+    /** Refills queued on [writer] and not yet run: the sender is not idle while one waits. */
+    private var refills = 0
+
     /** Messages ended so far by this sender, for the log. */
     @Volatile
     var ended = 0
@@ -68,7 +71,9 @@ class OutboxSender(
      * radio's queue is empty), and again when a message is written. [then] runs once every
      * message handed over has ended, or the connection has.
      */
-    fun sendPending(then: () -> Unit = {}) = writer.execute {
+    fun sendPending(then: () -> Unit = {}) = sendPending(then, refill = false)
+
+    private fun sendPending(then: () -> Unit, refill: Boolean) = writer.execute {
         val pending = try {
             store.pendingOutgoing()
         } catch (e: Exception) {
@@ -77,12 +82,16 @@ class OutboxSender(
         }
         val now = clock()
         val toSend = ArrayList<OutgoingMessage>()
-        val over = synchronized(lock) { finished }
+        val over = synchronized(lock) {
+            if (finished && refill) refills--
+            finished
+        }
         if (over) {
             then()
             return@execute
         }
         synchronized(lock) {
+            if (refill) refills--
             for (message in pending) {
                 if (message.id in inFlight || message.id in done) continue
                 if (now - message.createdAt > STALE_MS) {
@@ -124,9 +133,12 @@ class OutboxSender(
                         more = true
                     }
                 } else {
-                    synchronized(lock) {
-                        directsWaiting[id] = message
+                    val late = synchronized(lock) {
+                        if (!finished) directsWaiting[id] = message
+                        finished
                     }
+                    // The connection ended while the radio was taking it: it may have gone out.
+                    if (late) record(message, OutgoingStatus.UNCONFIRMED, "the connection ended before an acknowledgement")
                 }
             }
             else -> end(message, OutgoingStatus.FAILED, "not a conversation that can be sent to")
@@ -178,8 +190,15 @@ class OutboxSender(
     private fun end(message: OutgoingMessage, status: OutgoingStatus, why: String?) {
         synchronized(lock) { inFlight.remove(message.id) }
         record(message, status, why)
-        val again = synchronized(lock) { (more && !finished).also { if (it) more = false } }
-        if (again) sendPending()
+        val again = synchronized(lock) {
+            (more && !finished).also {
+                if (it) {
+                    more = false
+                    refills++
+                }
+            }
+        }
+        if (again) sendPending({}, refill = true)
         runIfIdle()
     }
 
@@ -199,7 +218,7 @@ class OutboxSender(
     }
 
     private fun runIfIdle() {
-        if (synchronized(lock) { inFlight.isEmpty() }) runWaiters()
+        if (synchronized(lock) { inFlight.isEmpty() && refills == 0 }) runWaiters()
     }
 
     private fun runWaiters() {

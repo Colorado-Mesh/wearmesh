@@ -44,9 +44,13 @@ interface StoreDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     fun insertMessage(message: MessageRow): Long
 
-    /** Keeps the [keep] most recently stored messages of [conversation] on [radio]. */
+    /**
+     * Keeps the [keep] most recently stored messages of [conversation] on [radio], and any message
+     * still waiting to send, however old.
+     */
     @Query(
-        "DELETE FROM messages WHERE radio = :radio AND conversation = :conversation AND id NOT IN " +
+        "DELETE FROM messages WHERE radio = :radio AND conversation = :conversation " +
+            "AND NOT (outgoing = 1 AND status = 'SENDING') AND id NOT IN " +
             "(SELECT id FROM messages WHERE radio = :radio AND conversation = :conversation ORDER BY id DESC LIMIT :keep)",
     )
     fun trim(radio: String, conversation: String, keep: Int)
@@ -83,6 +87,9 @@ interface StoreDao {
     /** Messages this watch has still to send, oldest first. */
     @Query("SELECT * FROM messages WHERE radio = :radio AND outgoing = 1 AND status = 'SENDING' ORDER BY id")
     fun pendingOutgoing(radio: String): List<MessageRow>
+
+    @Query("SELECT COUNT(*) FROM messages WHERE radio = :radio AND conversation = :conversation AND outgoing = 1 AND status = 'SENDING'")
+    fun pendingCount(radio: String, conversation: String): Int
 
     @Query("UPDATE messages SET status = :status WHERE radio = :radio AND id = :id AND outgoing = 1")
     fun setStatus(radio: String, id: Long, status: String)

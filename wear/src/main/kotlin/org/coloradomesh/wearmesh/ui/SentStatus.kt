@@ -11,7 +11,7 @@ object SentStatus {
     fun label(status: String?): String? = when (status?.let { name -> OutgoingStatus.entries.firstOrNull { it.name == name } }) {
         null -> null
         OutgoingStatus.SENDING -> "Sending…"
-        OutgoingStatus.SENT -> "Sent"
+        OutgoingStatus.SENT -> "Sent to radio"
         OutgoingStatus.DELIVERED -> "Delivered"
         OutgoingStatus.UNCONFIRMED -> "Not confirmed"
         OutgoingStatus.FAILED -> "Failed"

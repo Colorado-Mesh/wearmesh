@@ -34,8 +34,9 @@ class RoomMessageStore(private val db: WearMeshDatabase, override val address: S
 
     override fun setContactsSince(since: Long) = dao.setContactsSince(address, since)
 
-    override fun saveChannels(channels: List<Channel>, unanswered: Set<Int>) = db.runInTransaction(
-        Runnable {
+    override fun saveChannels(channels: List<Channel>, unanswered: Set<Int>): Int = db.runInTransaction(
+        Callable {
+            var dropped = 0
             val now = channels.associateBy { it.index }
             val kept = ArrayList<ChannelRow>()
             for (old in dao.channels(address)) {
@@ -44,10 +45,15 @@ class RoomMessageStore(private val db: WearMeshDatabase, override val address: S
                     continue
                 }
                 val same = now[old.slot]
-                if (same == null || same.name != old.name) dao.clearConversation(address, Conversations.channel(old.slot))
+                if (same == null || same.name != old.name) {
+                    val conversation = Conversations.channel(old.slot)
+                    dropped += dao.pendingCount(address, conversation)
+                    dao.clearConversation(address, conversation)
+                }
             }
             dao.clearChannels(address)
             dao.insertChannels(channels.map { ChannelRow(address, it.index, it.name, it.kind.name) } + kept)
+            dropped
         },
     )
 

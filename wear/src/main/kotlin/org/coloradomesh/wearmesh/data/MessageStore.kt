@@ -92,10 +92,11 @@ interface MessageStore {
 
     /**
      * Replaces the channel list with [channels]. A slot that now holds a different channel, or
-     * none, loses its messages. A slot in [unanswered] (the radio did not answer for it) keeps
-     * what was stored, since its channel is unknown rather than gone.
+     * none, loses its messages, including any still waiting to send: they were written for the
+     * old channel. Returns how many of those there were. A slot in [unanswered] (the radio did not
+     * answer for it) keeps what was stored, since its channel is unknown rather than gone.
      */
-    fun saveChannels(channels: List<Channel>, unanswered: Set<Int> = emptySet())
+    fun saveChannels(channels: List<Channel>, unanswered: Set<Int> = emptySet()): Int
 
     /** Records a complete full read (every channel slot answered, the whole contact list read) at [at]. */
     fun markFullRead(at: Long)

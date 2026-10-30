@@ -26,8 +26,9 @@ class SyncRecorderTest {
         }
         override fun dropContactsNotSeenSince(readAt: Long) { calls.add("dropContactsNotSeenSince $readAt") }
         override fun setContactsSince(since: Long) { calls.add("setContactsSince $since") }
-        override fun saveChannels(channels: List<Channel>, unanswered: Set<Int>) {
+        override fun saveChannels(channels: List<Channel>, unanswered: Set<Int>): Int {
             calls.add("saveChannels ${channels.map { it.name }}" + if (unanswered.isEmpty()) "" else " keeping $unanswered")
+            return 0
         }
         override fun markFullRead(at: Long) { calls.add("markFullRead $at") }
         override fun addMessage(message: IncomingMessage): Boolean {

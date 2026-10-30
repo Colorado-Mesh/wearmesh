@@ -88,7 +88,10 @@ class SyncRecorder(
     override fun onChannels(channels: List<Channel>) {
         if (afterFinish("the channel list")) return also.onChannels(channels)
         val missed = unansweredSlots
-        write { store.saveChannels(channels, missed) }
+        write {
+            val dropped = store.saveChannels(channels, missed)
+            if (dropped > 0) log("A channel slot now holds another channel, or none; $dropped messages waiting to send on it were not sent")
+        }
         channelsComplete = missed.isEmpty()
         markFullReadIfComplete()
         also.onChannels(channels)

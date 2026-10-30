@@ -157,10 +157,15 @@ object CheckInRun {
         // for step 4); once that sync has collected the queue, later messages do.
         val prefs = Prefs.of(app)
         val backlog = prefs.getString(Prefs.QUIET_SYNC_RADIO, null) == address
+        // A channel message waiting to send names only its slot, so a connection that sends one
+        // reads the channel list first: a slot given another channel meanwhile loses its waiting
+        // messages (see MessageStore.saveChannels) instead of sending them to the wrong channel.
+        var channelsWaiting = false
         val plan = try {
             withContext(Dispatchers.IO) {
                 Storage.call {
                     store.open()
+                    channelsWaiting = sendLimitMs > 0 && store.pendingOutgoing().any { it.conversation.startsWith("c:") }
                     SyncPlan.decide(store.radio(), address, System.currentTimeMillis(), fullRead)
                 }
             }
@@ -232,7 +237,10 @@ object CheckInRun {
             onLog = { SpikeLog.log("Check-in link: $it") },
             onLinkReady = { linkUpAt.set(SystemClock.elapsedRealtime()) },
             connectTries = CONNECT_TRIES,
-            startUp = plan.startUp.copy(clockTolerance = RadioClock.TOLERANCE_SECONDS),
+            startUp = plan.startUp.copy(
+                readChannels = plan.startUp.readChannels || channelsWaiting,
+                clockTolerance = RadioClock.TOLERANCE_SECONDS,
+            ),
             onClosed = { reason ->
                 closed.complete(reason)
                 outcome.complete(Outcome.Ended(reason))
