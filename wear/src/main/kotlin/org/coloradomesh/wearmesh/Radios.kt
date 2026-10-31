@@ -54,7 +54,8 @@ object Radios {
     fun forget(context: Context, address: String) {
         val prefs = Prefs.of(context)
         val known = KnownRadios.remove(KnownRadios.parse(prefs.getString(Prefs.RADIOS, null)), address)
-        val edit = prefs.edit().putString(Prefs.RADIOS, KnownRadios.format(known))
+        // Its complication channel goes too, so a radio added again starts on all that notify.
+        val edit = prefs.edit().putString(Prefs.RADIOS, KnownRadios.format(known)).remove(Prefs.COMPLICATION_CHANNEL + address)
         if (prefs.getString(Prefs.RADIO_ADDRESS, null) == address) {
             edit.remove(Prefs.RADIO_ADDRESS).remove(Prefs.RADIO_NAME).remove(Prefs.SELF_NAME).remove(Prefs.LAST_SYNC_AT)
             SyncStatus.reset()

@@ -46,6 +46,9 @@ object Prefs {
     /** The quick replies, as [org.coloradomesh.wearmesh.ui.QuickReplies] formats them; unset means the starting set. */
     const val QUICK_REPLIES = "quick_replies"
 
+    /** The channel the complication counts, such as "c:3"; the key is this plus the radio's address. Unset: all notifying conversations. */
+    const val COMPLICATION_CHANNEL = "complication_channel_"
+
     fun of(context: Context): SharedPreferences =
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 }

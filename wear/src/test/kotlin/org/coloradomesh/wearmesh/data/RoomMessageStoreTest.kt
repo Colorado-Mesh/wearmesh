@@ -47,6 +47,16 @@ class RoomMessageStoreTest {
     private fun contact(key: Char, name: String) = Contact("$key".repeat(64), Contact.TYPE_COMPANION, name, 1_700_000_000, 0.0, 0.0)
 
     @Test
+    fun theTileHearsReadMessagesButNotTheWatchsOwn() {
+        store.addMessage(message("first"))
+        store.addMessage(message("second", sentAt = 1_700_000_950))
+        db.dao().markRead(address, "c:0")
+        store.addOutgoing("c:0", "W0RMT", "mine", 1_800_000_060_000)
+        other.addMessage(message("another radio's"))
+        assertEquals(listOf("second", "first"), db.dao().newestReceived(address, 2).map { it.body })
+    }
+
+    @Test
     fun theSameMessageIsStoredOnce() {
         assertTrue(store.addMessage(message("Hey!")))
         assertFalse(store.addMessage(message("Hey!")))

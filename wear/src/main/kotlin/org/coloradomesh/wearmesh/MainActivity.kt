@@ -42,6 +42,7 @@ import org.coloradomesh.wearmesh.glance.Glances
 import org.coloradomesh.wearmesh.glance.WearMeshTileService
 import org.coloradomesh.wearmesh.notify.Notifier
 import org.coloradomesh.wearmesh.notify.NotifyRules
+import org.coloradomesh.wearmesh.ui.ComplicationScreen
 import org.coloradomesh.wearmesh.ui.ConfirmScreen
 import org.coloradomesh.wearmesh.ui.ConversationScreen
 import org.coloradomesh.wearmesh.ui.DiagnosticsScreen
@@ -670,6 +671,7 @@ class MainActivity : ComponentActivity() {
                     onInterval = { intervalMinutes = CheckIn.nextInterval(this@MainActivity) },
                     onAllowAlarms = { openSettingsPage(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, withPackage = true) },
                     onNotifications = { nav.navigate(NOTIFICATIONS) },
+                    onComplication = { nav.navigate(COMPLICATION) },
                     onQuickReplies = { nav.navigate(QUICK_REPLIES) },
                     onAllowNotifications = { openNotificationSettings() },
                     onReadEverything = {
@@ -690,6 +692,20 @@ class MainActivity : ComponentActivity() {
                 }
                 NotificationsScreen(rows = rows) { row ->
                     Notifier.setChoice(this@MainActivity, radioInUse, row.conversation, row.kind, !row.on)
+                }
+            }
+
+            composable(COMPLICATION) {
+                // Null until the store answers, so the saved choice is not shown as "All" meanwhile.
+                val channels by remember(radioInUse) { dao.channelsFlow(radioInUse) }.collectAsStateWithLifecycle(null)
+                var chosen by remember(radioInUse) { mutableStateOf(Glances.complicationChannel(this@MainActivity, radioInUse)) }
+                val loaded = channels
+                ComplicationScreen(
+                    channels = loaded?.sortedBy { it.slot }?.map { "c:${it.slot}" to it.name },
+                    chosen = chosen.takeIf { c -> loaded.orEmpty().any { "c:${it.slot}" == c } },
+                ) { conversation ->
+                    chosen = conversation
+                    Glances.setComplicationChannel(this@MainActivity, radioInUse, conversation)
                 }
             }
 
@@ -726,6 +742,7 @@ class MainActivity : ComponentActivity() {
         const val SETTINGS = "settings"
         const val DIAGNOSTICS = "diagnostics"
         const val NOTIFICATIONS = "notifications"
+        const val COMPLICATION = "complication"
         const val REPLY = "reply"
         const val MESSAGE = "message"
         const val QUICK_REPLIES = "quick-replies"

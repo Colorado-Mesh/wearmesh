@@ -104,7 +104,11 @@ interface StoreDao {
     @Query(LAST_MESSAGES)
     fun lastMessages(radio: String): List<ConversationLast>
 
-    /** The newest unread messages received in any conversation, newest first, for the Tile (M4). */
+    /** The newest messages received in any conversation, read or not, newest first, for the Tile (M4). */
+    @Query("SELECT * FROM messages WHERE radio = :radio AND outgoing = 0 ORDER BY id DESC LIMIT :limit")
+    fun newestReceived(radio: String, limit: Int): List<MessageRow>
+
+    /** The newest unread messages received in any conversation, newest first, for the Tile's Quick reply (M4). */
     @Query("SELECT * FROM messages WHERE radio = :radio AND read = 0 AND outgoing = 0 ORDER BY id DESC LIMIT :limit")
     fun newestUnread(radio: String, limit: Int): List<MessageRow>
 

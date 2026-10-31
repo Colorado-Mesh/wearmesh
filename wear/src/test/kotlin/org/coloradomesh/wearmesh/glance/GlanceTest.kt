@@ -56,4 +56,40 @@ class GlanceTest {
         assertEquals("Ann · Public", GlanceMessage("c:0", "Public", "Ann", "hi").from)
         assertEquals("Public", GlanceMessage("c:0", "Public", "", "hi").from)
     }
+
+    @Test
+    fun tileShowsTheLastTwoHeardWhereverTheyAre() {
+        val rows = listOf(
+            row(1, "d:aaaaaaaaaaaa"),
+            row(2, "c:0", read = true), // Public, quiet, already read: still heard
+            row(3, "c:14", outgoing = true), // sent by the watch: not heard
+            row(4, "c:3"),
+        )
+        assertEquals(listOf(4L, 2L), Glance.heard(rows.shuffled()).map { it.id })
+        assertEquals(listOf(4L), Glance.heard(rows, limit = 1).map { it.id })
+    }
+
+    @Test
+    fun aChosenChannelCountsWhetherOrNotItNotifies() {
+        val lasts = listOf(last("d:aaaaaaaaaaaa", 2), last("c:0", 30))
+        assertEquals(30, Glance.unreadIn(lasts, "c:0"))
+        assertEquals(0, Glance.unreadIn(lasts, "c:3"))
+    }
+
+    @Test
+    fun shortNames() {
+        assertEquals("Publ", Glance.shortName("Public"))
+        assertEquals("test", Glance.shortName("#testing"))
+        assertEquals("ops", Glance.shortName("#ops"))
+        assertEquals("Ham", Glance.shortName(" Ham "))
+        assertEquals("#", Glance.shortName("#"))
+        assertEquals("\uD83D\uDD25Den", Glance.shortName("\uD83D\uDD25Denver"))
+        assertEquals("Publ", ChannelCount("Public", 3).short)
+        // Joined emoji, flags and accents count as one character each and are never cut apart.
+        val family = "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67"
+        assertEquals("$family fa", Glance.shortName("$family family"))
+        assertEquals("\uD83C\uDDFA\uD83C\uDDF8USA", Glance.shortName("\uD83C\uDDFA\uD83C\uDDF8USA"))
+        assertEquals("e\u0301cole", Glance.shortName("e\u0301cole"))
+        assertEquals("\uD83D\uDC4D\uD83C\uDFFDok", Glance.shortName("\uD83D\uDC4D\uD83C\uDFFDok"))
+    }
 }

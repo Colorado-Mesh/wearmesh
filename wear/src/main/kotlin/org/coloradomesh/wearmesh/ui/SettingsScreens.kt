@@ -30,6 +30,7 @@ fun SettingsScreen(
     onInterval: () -> Unit,
     onAllowAlarms: () -> Unit,
     onNotifications: () -> Unit,
+    onComplication: () -> Unit,
     onQuickReplies: () -> Unit,
     onAllowNotifications: () -> Unit,
     onReadEverything: () -> Unit,
@@ -59,6 +60,7 @@ fun SettingsScreen(
         if (state.hasRadio) {
             item { WideChip("Notifications", detail = "On or off for each conversation", secondary = true) { onNotifications() } }
             item { WideChip("Quick replies", detail = "Change, add or remove", secondary = true) { onQuickReplies() } }
+            item { WideChip("Complication", detail = "What its count counts", secondary = true) { onComplication() } }
         }
         if (!state.notificationsAllowed) {
             item { WideChip("Allow notifications", detail = "They are off for WearMesh", detailLines = 2) { onAllowNotifications() } }
@@ -97,6 +99,31 @@ fun NotificationsScreen(rows: List<NotifyRow>, onToggle: (NotifyRow) -> Unit) {
         item { Note("Direct messages and private channels are on unless turned off. A message naming your radio always notifies.") }
         items(rows, key = { it.conversation }) { row ->
             WideChip(row.title, detail = if (row.on) "On" else "Off", secondary = !row.on) { onToggle(row) }
+        }
+    }
+}
+
+/**
+ * Settings › Complication (decided 31 October 2026): count every conversation that notifies, as
+ * before, or one channel. [channels] are conversation and name pairs, null while they load;
+ * [chosen] is null for all.
+ */
+@Composable
+fun ComplicationScreen(channels: List<Pair<String, String>>?, chosen: String?, onChoose: (String?) -> Unit) {
+    ScreenList {
+        item { ListHeader { Text("Complication") } }
+        item { Note("What the WearMesh complication on your watch face counts. A channel shows its unread count over its short name.") }
+        if (channels == null) {
+            item { Note("Loading channels…") }
+            return@ScreenList
+        }
+        item {
+            WideChip("All that notify", detail = if (chosen == null) "Chosen" else "Every conversation with notifications on", secondary = chosen != null) {
+                onChoose(null)
+            }
+        }
+        items(channels, key = { it.first }) { (conversation, name) ->
+            WideChip(name, detail = if (conversation == chosen) "Chosen" else null, secondary = conversation != chosen) { onChoose(conversation) }
         }
     }
 }

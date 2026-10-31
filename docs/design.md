@@ -181,6 +181,7 @@ Four milestones, each ending in a go/no-go check; the first is a throwaway spike
 5. **M4 — Tile and complication.** Unread count, Check now and the newest message on a Tile; an unread-count complication.
    - Decided (30 October 2026): the count is unread messages in conversations whose notifications are on; the Tile shows the newest two unread messages, the status line and mode, and Check now (opening the app), Quick reply and Open WearMesh; the complication shows the count with the icon (the icon alone when nothing is unread) or, in a wide slot, when the last sync was.
    - Steps: (1) complication, [M4-step1-complication.md](M4-step1-complication.md); (2) Tile, [M4-step2-tile.md](M4-step2-tile.md); (3) a day's carry.
+   - Changed (31 October 2026): the Tile shows the last two messages heard, read or not, from any conversation; the complication can count one channel chosen in Settings › Complication, showing the count over the channel's short name ([M4-glance-changes.md](M4-glance-changes.md)).
 
 **M0 results (23 October 2026): complete**
 

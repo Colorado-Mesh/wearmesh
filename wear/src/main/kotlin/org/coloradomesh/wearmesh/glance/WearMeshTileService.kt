@@ -33,7 +33,8 @@ import java.util.Date
 /**
  * The WearMesh Tile (M4 step 2), as decided for M4:
  * - the unread count at the top, counted as the complication counts it;
- * - the newest two unread messages, sender and the start of the text, each opening its conversation;
+ * - the last two messages heard, in any conversation, read or not (decided 31 October 2026), sender
+ *   and the start of the text, each opening its conversation; unread ones bright, read ones dimmed;
  * - Check now (opens WearMesh, which checks at once), Quick reply (the newest unread message's
  *   conversation, on its quick replies) and Open WearMesh;
  * - a status line with the mode: "Live: Connected", or when Check-in last synced.
@@ -87,15 +88,16 @@ class WearMeshTileService : TileService() {
             .setWidth(expand())
             .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_CENTER)
         if (radio != null) {
-            glance.newest.forEachIndexed { index, message ->
+            glance.heard.forEachIndexed { index, message ->
                 if (index > 0) content.addContent(spacer(4f))
                 content.addContent(messageRow(radio, message))
             }
+            if (glance.heard.isEmpty()) content.addContent(text("No messages heard yet", Typography.TYPOGRAPHY_CAPTION2, MUTED, 1))
         } else {
             content.addContent(text("Choose a radio in WearMesh", Typography.TYPOGRAPHY_CAPTION2, MUTED, 2))
         }
-        if (glance.newest.isNotEmpty() || radio == null) content.addContent(spacer(6f))
-        content.addContent(buttons(radio, glance.newest.firstOrNull()))
+        content.addContent(spacer(6f))
+        content.addContent(buttons(radio, glance.replyTo))
 
         val layout = PrimaryLayout.Builder(device)
             .setResponsiveContentInsetEnabled(true)
@@ -120,13 +122,17 @@ class WearMeshTileService : TileService() {
         }
     }
 
-    /** One unread message: who from on the first line, the text on the second; opens its conversation. */
+    /**
+     * One message: who from on the first line, the text on the second; opens its conversation.
+     * An unread one is bright, with a dot before the sender; a read one is dimmed.
+     */
     private fun messageRow(radio: String, message: GlanceMessage): LayoutElementBuilders.LayoutElement {
+        val from = if (message.unread) "\u25CF ${message.from}" else message.from
         val lines = LayoutElementBuilders.Column.Builder()
             .setWidth(expand())
             .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_START)
-            .addContent(text(message.from, Typography.TYPOGRAPHY_CAPTION1, ACCENT, 1))
-            .addContent(text(message.body, Typography.TYPOGRAPHY_CAPTION2, TEXT, 1))
+            .addContent(text(from, Typography.TYPOGRAPHY_CAPTION1, if (message.unread) ACCENT else MUTED, 1))
+            .addContent(text(message.body, Typography.TYPOGRAPHY_CAPTION2, if (message.unread) TEXT else MUTED, 1))
             .build()
         val open = clickable("open:${message.conversation}", open(this, radio, message.conversation, message.title, quick = false))
         return LayoutElementBuilders.Box.Builder()
@@ -147,7 +153,9 @@ class WearMeshTileService : TileService() {
                             .build(),
                     )
                     .setSemantics(
-                        ModifiersBuilders.Semantics.Builder().setContentDescription("${message.from}: ${message.body}").build(),
+                        ModifiersBuilders.Semantics.Builder()
+                            .setContentDescription("${if (message.unread) "Unread, " else ""}${message.from}: ${message.body}")
+                            .build(),
                     )
                     .build(),
             )
@@ -155,7 +163,7 @@ class WearMeshTileService : TileService() {
             .build()
     }
 
-    /** Check now, Quick reply (when something is unread) and Open WearMesh. */
+    /** Check now, Quick reply (to the newest unread message that counts, when there is one) and Open WearMesh. */
     private fun buttons(radio: String?, newest: GlanceMessage?): LayoutElementBuilders.LayoutElement {
         val row = LayoutElementBuilders.Row.Builder().setVerticalAlignment(LayoutElementBuilders.VERTICAL_ALIGN_CENTER)
         val check = home(this).addKeyToExtraMapping(
