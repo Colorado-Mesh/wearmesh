@@ -33,6 +33,9 @@ import java.time.Instant
  * - long text: "Synced 4 min ago" (Wear OS keeps the time current), or "Live: Connected", with
  *   the unread count as its title;
  * - an icon alone, for faces with only an image slot.
+ * With a channel chosen in Settings › Complication (decided 31 October 2026), the short text is
+ * that channel's unread count over its short name, or the name alone when nothing in it is unread,
+ * and the long text's title names it; the icon is left out so faces show the name.
  * Tapping it opens WearMesh, which syncs on opening. It updates only when the app asks
  * ([Glances.refresh]), after each sync and whenever messages are read.
  */
@@ -52,8 +55,14 @@ class WearMeshComplicationService : SuspendingComplicationDataSourceService() {
 
     private fun data(type: ComplicationType, glance: Glance): ComplicationData? {
         val icon = MonochromaticImage.Builder(Icon.createWithResource(this, R.drawable.ic_notification)).build()
+        val channel = glance.channel
         val description = PlainComplicationText.Builder(
-            if (glance.unread > 0) "WearMesh, ${glance.unread} unread" else "WearMesh, nothing unread",
+            when {
+                channel != null && channel.unread > 0 -> "WearMesh, ${channel.unread} unread in ${channel.name}"
+                channel != null -> "WearMesh, nothing unread in ${channel.name}"
+                glance.unread > 0 -> "WearMesh, ${glance.unread} unread"
+                else -> "WearMesh, nothing unread"
+            },
         ).build()
         val open = PendingIntent.getActivity(
             this,
@@ -62,7 +71,12 @@ class WearMeshComplicationService : SuspendingComplicationDataSourceService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         return when (type) {
-            ComplicationType.SHORT_TEXT -> {
+            ComplicationType.SHORT_TEXT -> if (channel != null) {
+                val count = Glance.countText(channel.unread)
+                val builder = ShortTextComplicationData.Builder(PlainComplicationText.Builder(count.ifEmpty { channel.short }).build(), description)
+                if (count.isNotEmpty()) builder.setTitle(PlainComplicationText.Builder(channel.short).build())
+                builder.setTapAction(open).build()
+            } else {
                 val count = Glance.countText(glance.unread)
                 ShortTextComplicationData.Builder(
                     if (count.isEmpty()) ComplicationText.EMPTY else PlainComplicationText.Builder(count).build(),
@@ -78,7 +92,12 @@ class WearMeshComplicationService : SuspendingComplicationDataSourceService() {
                     ).setText("Synced ^1 ago").build()
                     else -> PlainComplicationText.Builder("Not synced yet").build()
                 }
-                val title = if (glance.unread > 0) "${Glance.countText(glance.unread)} unread" else "WearMesh"
+                val title = when {
+                    channel != null && channel.unread > 0 -> "${Glance.countText(channel.unread)} unread in ${channel.name}"
+                    channel != null -> channel.name
+                    glance.unread > 0 -> "${Glance.countText(glance.unread)} unread"
+                    else -> "WearMesh"
+                }
                 LongTextComplicationData.Builder(text, description)
                     .setTitle(PlainComplicationText.Builder(title).build())
                     .setMonochromaticImage(icon)

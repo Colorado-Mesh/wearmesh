@@ -7,6 +7,7 @@ import androidx.wear.watchface.complications.datasource.ComplicationDataSourceUp
 import org.coloradomesh.wearmesh.Prefs
 import org.coloradomesh.wearmesh.SpikeLog
 import org.coloradomesh.wearmesh.SpikeState
+import org.coloradomesh.wearmesh.data.MessageRow
 import org.coloradomesh.wearmesh.data.Storage
 import org.coloradomesh.wearmesh.notify.Notifier
 
@@ -25,12 +26,29 @@ object Glances {
         val dao = Storage.dao(context)
         val channels = dao.channels(radio)
         val choices = Notifier.readChoices(context, radio)
-        val unread = Glance.unread(dao.lastMessages(radio), channels, choices)
-        // Enough rows that, with quiet channels left out, two that count are almost always among them.
-        val newest = Glance.newest(dao.newestUnread(radio, NEWEST_ROWS), channels, choices).map {
-            GlanceMessage(it.conversation, Notifier.titleFor(context, radio, it.conversation), it.sender, it.body)
-        }
-        return Glance(unread, lastSyncAt, live, newest)
+        val lasts = dao.lastMessages(radio)
+        val unread = Glance.unread(lasts, channels, choices)
+        fun message(row: MessageRow) =
+            GlanceMessage(row.conversation, Notifier.titleFor(context, radio, row.conversation), row.sender, row.body, unread = !row.read)
+        val heard = Glance.heard(dao.newestReceived(radio, Glance.TILE_MESSAGES)).map(::message)
+        // Enough rows that, with quiet channels left out, one that counts is almost always among them.
+        val replyTo = Glance.newest(dao.newestUnread(radio, NEWEST_ROWS), channels, choices, limit = 1).firstOrNull()?.let(::message)
+        val chosen = complicationChannel(context, radio)
+        val channel = channels.firstOrNull { "c:${it.slot}" == chosen }?.let { ChannelCount(it.name, Glance.unreadIn(lasts, "c:${it.slot}")) }
+        return Glance(unread, lastSyncAt, live, heard, replyTo, channel)
+    }
+
+    /** The channel the complication counts for [radio], such as "c:3", or null for all notifying conversations. */
+    fun complicationChannel(context: Context, radio: String): String? =
+        Prefs.of(context).getString(Prefs.COMPLICATION_CHANNEL + radio, null)
+
+    /** Sets what the complication counts, and shows it at once. */
+    fun setComplicationChannel(context: Context, radio: String, conversation: String?) {
+        val edit = Prefs.of(context).edit()
+        if (conversation == null) edit.remove(Prefs.COMPLICATION_CHANNEL + radio) else edit.putString(Prefs.COMPLICATION_CHANNEL + radio, conversation)
+        edit.apply()
+        SpikeLog.log("Complication: counts ${conversation ?: "all notifying conversations"}")
+        refresh(context)
     }
 
     /** Asks Wear OS to show the glance again on both; cheap, and safe to call after every sync or read. */
