@@ -105,13 +105,18 @@ fun NotificationsScreen(rows: List<NotifyRow>, onToggle: (NotifyRow) -> Unit) {
 
 /**
  * Settings › Complication (decided 31 October 2026): count every conversation that notifies, as
- * before, or one channel. [channels] are conversation and name pairs; [chosen] is null for all.
+ * before, or one channel. [channels] are conversation and name pairs, null while they load;
+ * [chosen] is null for all.
  */
 @Composable
-fun ComplicationScreen(channels: List<Pair<String, String>>, chosen: String?, onChoose: (String?) -> Unit) {
+fun ComplicationScreen(channels: List<Pair<String, String>>?, chosen: String?, onChoose: (String?) -> Unit) {
     ScreenList {
         item { ListHeader { Text("Complication") } }
         item { Note("What the WearMesh complication on your watch face counts. A channel shows its unread count over its short name.") }
+        if (channels == null) {
+            item { Note("Loading channels…") }
+            return@ScreenList
+        }
         item {
             WideChip("All that notify", detail = if (chosen == null) "Chosen" else "Every conversation with notifications on", secondary = chosen != null) {
                 onChoose(null)

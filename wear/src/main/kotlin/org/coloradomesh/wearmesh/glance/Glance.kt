@@ -42,10 +42,57 @@ data class Glance(
         /**
          * A channel's name short enough for a complication's title: without a leading "#", whole
          * up to 5 characters, otherwise its first 4 ("Public" is "Publ", "#testing" is "test").
+         * Characters are counted as [graphemes], so an emoji made of several is never cut apart.
          */
         fun shortName(name: String): String {
             val bare = name.trim().removePrefix("#").ifEmpty { name.trim() }
-            return if (bare.codePointCount(0, bare.length) <= 5) bare else bare.substring(0, bare.offsetByCodePoints(0, 4))
+            val characters = graphemes(bare)
+            return if (characters.size <= 5) bare else characters.take(4).joinToString("")
+        }
+
+        /**
+         * [text] split into the characters a reader sees: a code point with the marks, variation
+         * selectors, skin tones and tags after it, emoji joined by zero-width joiners, and flags
+         * (pairs of regional indicators). Written out rather than left to java.text.BreakIterator,
+         * which before Java 20 splits joined emoji; Android's would not, but the JVM tests run on 17.
+         */
+        fun graphemes(text: String): List<String> {
+            val out = ArrayList<String>()
+            var i = 0
+            while (i < text.length) {
+                val start = i
+                val first = text.codePointAt(i)
+                i += Character.charCount(first)
+                var flagHalf = isRegionalIndicator(first)
+                while (i < text.length) {
+                    val next = text.codePointAt(i)
+                    when {
+                        next == ZERO_WIDTH_JOINER -> {
+                            i += Character.charCount(next)
+                            if (i < text.length) i += Character.charCount(text.codePointAt(i))
+                        }
+                        extendsCharacter(next) -> i += Character.charCount(next)
+                        flagHalf && isRegionalIndicator(next) -> {
+                            i += Character.charCount(next)
+                            flagHalf = false
+                        }
+                        else -> break
+                    }
+                }
+                out.add(text.substring(start, i))
+            }
+            return out
+        }
+
+        private const val ZERO_WIDTH_JOINER = 0x200D
+
+        private fun isRegionalIndicator(cp: Int) = cp in 0x1F1E6..0x1F1FF
+
+        private fun extendsCharacter(cp: Int): Boolean {
+            val type = Character.getType(cp)
+            return type == Character.NON_SPACING_MARK.toInt() || type == Character.ENCLOSING_MARK.toInt() ||
+                type == Character.COMBINING_SPACING_MARK.toInt() ||
+                cp in 0xFE00..0xFE0F || cp in 0x1F3FB..0x1F3FF || cp in 0xE0020..0xE007F
         }
 
         /** Of [rows], unread and newest first, those in conversations that count, as [unread] counts them. */

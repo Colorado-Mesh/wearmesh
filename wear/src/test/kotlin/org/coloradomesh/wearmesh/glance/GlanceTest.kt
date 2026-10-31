@@ -85,5 +85,11 @@ class GlanceTest {
         assertEquals("#", Glance.shortName("#"))
         assertEquals("\uD83D\uDD25Den", Glance.shortName("\uD83D\uDD25Denver"))
         assertEquals("Publ", ChannelCount("Public", 3).short)
+        // Joined emoji, flags and accents count as one character each and are never cut apart.
+        val family = "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67"
+        assertEquals("$family fa", Glance.shortName("$family family"))
+        assertEquals("\uD83C\uDDFA\uD83C\uDDF8USA", Glance.shortName("\uD83C\uDDFA\uD83C\uDDF8USA"))
+        assertEquals("e\u0301cole", Glance.shortName("e\u0301cole"))
+        assertEquals("\uD83D\uDC4D\uD83C\uDFFDok", Glance.shortName("\uD83D\uDC4D\uD83C\uDFFDok"))
     }
 }

@@ -696,11 +696,13 @@ class MainActivity : ComponentActivity() {
             }
 
             composable(COMPLICATION) {
-                val channels by remember(radioInUse) { dao.channelsFlow(radioInUse) }.collectAsStateWithLifecycle(emptyList())
+                // Null until the store answers, so the saved choice is not shown as "All" meanwhile.
+                val channels by remember(radioInUse) { dao.channelsFlow(radioInUse) }.collectAsStateWithLifecycle(null)
                 var chosen by remember(radioInUse) { mutableStateOf(Glances.complicationChannel(this@MainActivity, radioInUse)) }
+                val loaded = channels
                 ComplicationScreen(
-                    channels = channels.sortedBy { it.slot }.map { "c:${it.slot}" to it.name },
-                    chosen = chosen.takeIf { c -> channels.any { "c:${it.slot}" == c } },
+                    channels = loaded?.sortedBy { it.slot }?.map { "c:${it.slot}" to it.name },
+                    chosen = chosen.takeIf { c -> loaded.orEmpty().any { "c:${it.slot}" == c } },
                 ) { conversation ->
                     chosen = conversation
                     Glances.setComplicationChannel(this@MainActivity, radioInUse, conversation)
