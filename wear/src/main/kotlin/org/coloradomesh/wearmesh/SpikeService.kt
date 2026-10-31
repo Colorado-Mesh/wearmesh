@@ -189,6 +189,13 @@ class SpikeService : Service() {
 
             override fun onDirectResult(id: Long, publicKeyHex: String, text: String, outcome: DirectOutcome) =
                 sender.onDirectResult(id, outcome)
+
+            // A link that is up but never got through start-up would sit idle: close it, and the
+            // reconnect after a drop tries again.
+            override fun onStartUpFailed(what: String) {
+                SpikeLog.log("M0: the radio did not answer $what; closing the link to try again")
+                main.post { if (mine == generation) link.get()?.close() }
+            }
         }
         val sync = SyncRecorder(
             store,

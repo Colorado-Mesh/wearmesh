@@ -32,6 +32,12 @@ class DelaysTest {
     }
 
     @Test
+    fun aSenderClockFarBehindIsCountedApart() {
+        val years = 21_567L * 3_600_000
+        assertEquals("delay median 6 min, longest 9 min, 1 with the sender's clock far behind", Delays.summary(listOf(after(6 * 60_000), after(years), after(9 * 60_000))))
+    }
+
+    @Test
     fun formats() {
         assertEquals("119 s", Delays.format(119_999))
         assertEquals("2 min", Delays.format(120_000))

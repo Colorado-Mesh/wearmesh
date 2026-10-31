@@ -217,6 +217,11 @@ object CheckInRun {
                 outcome.complete(Outcome.Drained)
             }
 
+            // Ends the check-in at once, rather than at the time limit with the radio held all along.
+            override fun onStartUpFailed(what: String) {
+                outcome.complete(Outcome.Ended("the radio did not answer $what"))
+            }
+
             override fun onSendResult(channelIndex: Int, text: String, accepted: Boolean) =
                 sender.onSendResult(channelIndex, text, accepted)
 
