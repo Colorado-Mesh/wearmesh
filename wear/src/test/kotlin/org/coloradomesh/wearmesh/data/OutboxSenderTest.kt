@@ -198,6 +198,27 @@ class OutboxSenderTest {
     }
 
     @Test
+    fun twoMessagesToADroppedContactShareOneSave() {
+        store.kept.add(KeptContact("0000000000ff" + "11".repeat(26), "W0RMT-M9", Contact.TYPE_COMPANION, 1_700_000_000))
+        val first = write("d:0000000000ff", "Yes")
+        val second = write("d:0000000000ff", "On my way")
+        sender.sendPending()
+        runWrites()
+        for (id in listOf(100L, 101L)) {
+            sender.onDirectRefused(id, CompanionClient.ERROR_NOT_FOUND)
+            sender.onDirectResult(id, DirectOutcome.REFUSED)
+        }
+        runWrites()
+        assertEquals(1, radio.sent.count { it.startsWith("save") })
+        sender.onContactSaved("0000000000ff" + "11".repeat(26), saved = true, errorCode = null)
+        runWrites()
+        // Both sent again.
+        assertEquals(listOf("d:0000000000ff Yes", "d:0000000000ff On my way"), radio.sent.takeLast(2))
+        assertEquals(OutgoingStatus.SENDING, store.statuses[first])
+        assertEquals(OutgoingStatus.SENDING, store.statuses[second])
+    }
+
+    @Test
     fun aContactTheRadioWillNotTakeBackFailsTheMessage() {
         store.kept.add(KeptContact("0000000000ff" + "11".repeat(26), "W0RMT-M9", Contact.TYPE_COMPANION, 1_700_000_000))
         val id = write("d:0000000000ff", "Yes")

@@ -164,9 +164,10 @@ object CheckInRun {
         // for step 4); once that sync has collected the queue, later messages do.
         val prefs = Prefs.of(app)
         // Settings › Keep contacts on radio: the only time the watch changes the radio's contacts.
-        // On when this run started and still on at each write, so turning it off stops it at once.
+        // Read when the run starts for its full read's plan, and again at each write, so turning
+        // the setting on or off takes effect at once for saves.
         val keepContacts = prefs.getBoolean(Prefs.KEEP_CONTACTS, false)
-        fun keepingNow() = keepContacts && prefs.getBoolean(Prefs.KEEP_CONTACTS, false)
+        fun keepingNow() = prefs.getBoolean(Prefs.KEEP_CONTACTS, false)
         val backlog = prefs.getString(Prefs.QUIET_SYNC_RADIO, null) == address
         // A channel message waiting to send names only its slot, so a connection that sends one
         // reads the channel list first: a slot given another channel meanwhile loses its waiting

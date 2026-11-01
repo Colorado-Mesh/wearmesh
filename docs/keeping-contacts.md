@@ -8,9 +8,9 @@ A MeshCore companion radio adds every node it hears an advert from, until its co
 
 ## Opt-in: Settings › Keep contacts on radio
 
-This is the only time WearMesh changes anything on the radio besides its clock, so it is **off by default** (decided 1 November 2026, after review of meshcore-kotlin PR 8, whose rules forbid writing to the radio unless the user asks). Turn it on in Settings › **Keep contacts on radio**. Favourites and putting back dropped contacts start at the next full read; a refused direct message has its contact put back from the next connection or check-in that sends it, even before a full read. Turned off, it stops at once: nothing more is saved, also on a Live link already open.
+This is the only time WearMesh changes anything on the radio besides its clock, so it is **off by default** (decided 1 November 2026, after review of meshcore-kotlin PR 8, whose rules forbid writing to the radio unless the user asks). Turn it on in Settings › **Keep contacts on radio**. Favourites and putting back dropped contacts start at the next full read; a refused direct message has its contact put back at once, also on a Live link already open. Turned off, it stops at once: nothing more is saved, and saves already queued are dropped.
 
-With it off, the watch changes nothing, and after a full read the log names anyone you message who is missing from the radio:
+With it off, the watch makes no change to the radio's contacts (it still sets the radio's clock when that is more than a minute off), and after a full read the log names anyone you message who is missing from the radio:
 
 ```
 Contacts: not on the radio, though you message them: W0RMT-M9. Settings › Keep contacts on radio would put them back
@@ -48,7 +48,7 @@ These settings keep the list from filling with nodes you never message, and need
 
 A full read is what these checks need. In Check-in, use Settings › **Read channels and contacts again**. In Live, that is turned off while the link is up, but Live reads everything each time it connects: switch Settings › Mode to Check-in and back to Live, or use the read in Check-in.
 
-0. **Off by default.** Before turning it on, a full read changes nothing on the radio, and the log names anyone you message who is missing. Then turn on Settings › Keep contacts on radio.
+0. **Off by default.** Before turning it on, a full read makes no change to the radio's contacts, and the log names anyone you message who is missing. Then turn on Settings › Keep contacts on radio.
 1. **Favourites.** After the next full read, the log makes each person you have messaged a favourite, and the phone app shows them as favourites.
 2. **A drop.** When the log next says the radio no longer lists someone you message, the next lines put them back. A direct message to them is Delivered.
 3. **A refusal.** Send a direct message to someone the radio has just dropped, before the next full read: the log shows them put back and the message sent again, and it ends Delivered or Not confirmed rather than Failed.
