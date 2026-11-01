@@ -2,6 +2,7 @@ package org.coloradomesh.wearmesh.ui
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.coloradomesh.wearmesh.data.MessageRow
 import org.junit.Test
 
 class SignalTest {
@@ -18,7 +19,15 @@ class SignalTest {
     }
 
     @Test
-    fun olderFirmwareGivesNoLine() {
+    fun olderFirmwareGivesHopsAlone() {
+        assertEquals("2 hops", Signal.describe(null, 2))
         assertNull(Signal.describe(null, null))
+    }
+
+    @Test
+    fun onlyAReceivedMessageHasALine() {
+        val received = MessageRow(radio = "R", conversation = "c:0", sender = "Ann", body = "hi", sentAt = 1, receivedAt = 1, snr = 6.5, hops = 3)
+        assertEquals("SNR 6.5 dB · 3 hops", Signal.forMessage(received))
+        assertNull(Signal.forMessage(received.copy(outgoing = true)))
     }
 }

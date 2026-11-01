@@ -237,18 +237,18 @@ class SyncRecorderTest {
     @Test
     fun storesAChannelMessageWithItsSenderSplitOff() {
         val recorder = recorder(full = false)
-        recorder.onChannelMessage(ChannelMessage(3, "ke4iqr-1: yep another test", 1_700_000_900))
+        recorder.onChannelMessage(ChannelMessage(3, "ke4iqr-1: yep another test", 1_700_000_900, snr = 6.25, hops = 3))
         runWrites()
-        assertEquals(IncomingMessage("c:3", "ke4iqr-1", "yep another test", 1_700_000_900, now), store.messages.single())
+        assertEquals(IncomingMessage("c:3", "ke4iqr-1", "yep another test", 1_700_000_900, now, snr = 6.25, hops = 3), store.messages.single())
         assertEquals(1, recorder.newMessages)
     }
 
     @Test
     fun storesADirectMessageUnderItsSender() {
         val recorder = recorder(full = false)
-        recorder.onDirectMessage(DirectMessage("A1B2C3D4E5F6", "meet at 5: north lot", 1_700_000_950))
+        recorder.onDirectMessage(DirectMessage("A1B2C3D4E5F6", "meet at 5: north lot", 1_700_000_950, snr = -2.5, hops = null))
         runWrites()
-        assertEquals(IncomingMessage("d:a1b2c3d4e5f6", "", "meet at 5: north lot", 1_700_000_950, now), store.messages.single())
+        assertEquals(IncomingMessage("d:a1b2c3d4e5f6", "", "meet at 5: north lot", 1_700_000_950, now, snr = -2.5, hops = null), store.messages.single())
     }
 
     @Test
