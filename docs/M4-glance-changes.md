@@ -22,12 +22,12 @@ Settings › Complication offers **All that notify** (the default, as in step 1)
 
 | Slot | All that notify | A channel |
 | --- | --- | --- |
-| Short text | The icon and the count; the icon alone at 0 | The count over the short name, such as "3" over "Publ"; the name alone at 0 |
+| Short text | The icon and the count; the icon alone at 0 | The count over the short name, such as "3" over "#PUB"; the name alone at 0 |
 | Long text | "Synced … ago" or "Live: …", titled "3 unread" or "WearMesh" | The same text, titled "3 unread in Public" or "Public" |
 | Image only | The icon | The icon |
 
 - A channel complication counts that channel's unread messages whether or not its notifications are on.
-- The short name drops a leading "#". A name of up to 5 characters is used whole; a longer one gives its first 4 ("Public" is "Publ", "#testing" is "test").
+- The short name is in capitals (changed 1 November 2026). An open channel, Public or a hashtag channel, which anyone can read, shows "#" and the first 3 characters of its name: "Public" is "#PUB", "#testing" is "#TES". A private channel shows its first 4: "mesh-ops" is "MESH". A leading "#" in a name is not counted, and an emoji made of several characters counts as one.
 - The icon is left out of a channel's short text, so faces show the name instead.
 - If the chosen slot later holds no channel, the complication goes back to All that notify.
 

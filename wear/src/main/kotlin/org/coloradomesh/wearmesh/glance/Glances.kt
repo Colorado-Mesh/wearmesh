@@ -34,7 +34,7 @@ object Glances {
         // Enough rows that, with quiet channels left out, one that counts is almost always among them.
         val replyTo = Glance.newest(dao.newestUnread(radio, NEWEST_ROWS), channels, choices, limit = 1).firstOrNull()?.let(::message)
         val chosen = complicationChannel(context, radio)
-        val channel = channels.firstOrNull { "c:${it.slot}" == chosen }?.let { ChannelCount(it.name, Glance.unreadIn(lasts, "c:${it.slot}")) }
+        val channel = channels.firstOrNull { "c:${it.slot}" == chosen }?.let { ChannelCount(it.name, Glance.unreadIn(lasts, "c:${it.slot}"), open = Glance.isOpen(it.kind)) }
         return Glance(unread, lastSyncAt, live, heard, replyTo, channel)
     }
 

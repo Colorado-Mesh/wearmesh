@@ -4,6 +4,8 @@ import org.coloradomesh.wearmesh.data.ChannelRow
 import org.coloradomesh.wearmesh.data.ConversationLast
 import org.coloradomesh.wearmesh.data.MessageRow
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GlanceTest {
@@ -78,18 +80,36 @@ class GlanceTest {
 
     @Test
     fun shortNames() {
-        assertEquals("Publ", Glance.shortName("Public"))
-        assertEquals("test", Glance.shortName("#testing"))
-        assertEquals("ops", Glance.shortName("#ops"))
-        assertEquals("Ham", Glance.shortName(" Ham "))
-        assertEquals("#", Glance.shortName("#"))
-        assertEquals("\uD83D\uDD25Den", Glance.shortName("\uD83D\uDD25Denver"))
-        assertEquals("Publ", ChannelCount("Public", 3).short)
+        // Open channels: "#" and 3 characters; private ones: 4. In capitals.
+        assertEquals("#PUB", Glance.shortName("Public", open = true))
+        assertEquals("#TES", Glance.shortName("#testing", open = true))
+        assertEquals("#OPS", Glance.shortName("#ops", open = true))
+        assertEquals("#DE", Glance.shortName("#de", open = true))
+        assertEquals("MESH", Glance.shortName("mesh-ops", open = false))
+        assertEquals("HAM", Glance.shortName(" Ham ", open = false))
+        assertEquals("OPS", Glance.shortName("#ops", open = false))
+        assertEquals("#", Glance.shortName("#", open = false))
+        assertEquals("\uD83D\uDD25DEN", Glance.shortName("\uD83D\uDD25Denver", open = false))
+        assertEquals("#PUB", ChannelCount("Public", 3, open = true).short)
+        assertEquals("MESH", ChannelCount("mesh-ops", 3).short)
+        // A letter that grows in capitals still leaves 3 or 4 characters.
+        assertEquals("#SSA", Glance.shortName("ßab", open = true))
+        assertEquals("SSAB", Glance.shortName("ßabc", open = false))
         // Joined emoji, flags and accents count as one character each and are never cut apart.
         val family = "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67"
-        assertEquals("$family fa", Glance.shortName("$family family"))
-        assertEquals("\uD83C\uDDFA\uD83C\uDDF8USA", Glance.shortName("\uD83C\uDDFA\uD83C\uDDF8USA"))
-        assertEquals("e\u0301cole", Glance.shortName("e\u0301cole"))
-        assertEquals("\uD83D\uDC4D\uD83C\uDFFDok", Glance.shortName("\uD83D\uDC4D\uD83C\uDFFDok"))
+        assertEquals("$family FA", Glance.shortName("$family family", open = false))
+        assertEquals("#\uD83C\uDDFA\uD83C\uDDF8US", Glance.shortName("\uD83C\uDDFA\uD83C\uDDF8USA", open = true))
+        assertEquals("E\u0301COL", Glance.shortName("e\u0301cole", open = false))
+        assertEquals("\uD83D\uDC4D\uD83C\uDFFDOK", Glance.shortName("\uD83D\uDC4D\uD83C\uDFFDok", open = false))
+    }
+
+    @Test
+    fun publicAndHashtagChannelsAreOpen() {
+        assertTrue(Glance.isOpen("PUBLIC"))
+        assertTrue(Glance.isOpen("HASHTAG"))
+        assertFalse(Glance.isOpen("PRIVATE"))
+        // As each channel's kind is stored, so the complication shows what the radio said.
+        val kinds = channels.associate { it.name to Glance.isOpen(it.kind) }
+        assertEquals(mapOf("Public" to true, "#testing" to true, "mesh-ops" to false), kinds)
     }
 }

@@ -40,15 +40,21 @@ data class Glance(
             lasts.firstOrNull { it.conversation == conversation }?.unread ?: 0
 
         /**
-         * A channel's name short enough for a complication's title: without a leading "#", whole
-         * up to 5 characters, otherwise its first 4 ("Public" is "Publ", "#testing" is "test").
+         * A channel's name short enough for a complication's title, in capitals (decided 1 November
+         * 2026). An [open] channel, Public or a hashtag channel, which anyone can read, is "#" and
+         * the first 3 characters of its name ("Public" is "#PUB", "#testing" is "#TES"); a private
+         * one is its first 4 ("mesh-ops" is "MESH"). A leading "#" in the name is not counted.
          * Characters are counted as [graphemes], so an emoji made of several is never cut apart.
          */
-        fun shortName(name: String): String {
-            val bare = name.trim().removePrefix("#").ifEmpty { name.trim() }
-            val characters = graphemes(bare)
-            return if (characters.size <= 5) bare else characters.take(4).joinToString("")
+        fun shortName(name: String, open: Boolean): String {
+            val bare = name.trim().removePrefix("#").trim().ifEmpty { name.trim() }
+            // In capitals before counting: some letters grow ("ß" is "SS"), and the count is what shows.
+            val characters = graphemes(bare.uppercase()).take(if (open) 3 else 4).joinToString("")
+            return if (open) "#$characters" else characters
         }
+
+        /** Whether a channel of this stored kind is one anyone can read: Public, or a hashtag channel. */
+        fun isOpen(kind: String): Boolean = kind == "PUBLIC" || kind == "HASHTAG"
 
         /**
          * [text] split into the characters a reader sees: a code point with the marks, variation
@@ -121,9 +127,9 @@ data class Glance(
     }
 }
 
-/** The chosen channel's name and unread count. */
-data class ChannelCount(val name: String, val unread: Int) {
-    val short: String get() = Glance.shortName(name)
+/** The chosen channel's name, whether anyone can read it (Public or a hashtag channel), and its unread count. */
+data class ChannelCount(val name: String, val unread: Int, val open: Boolean = false) {
+    val short: String get() = Glance.shortName(name, open)
 }
 
 /** One message on the Tile. [title] is the conversation's: a contact's or channel's name. */
