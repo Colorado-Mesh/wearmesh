@@ -106,6 +106,8 @@ fun MessageScreen(
             val time = TimeAgo.format(now, message.receivedAt)
             Note(SentStatus.label(message.status)?.let { "$time · $it" } ?: time)
         }
+        // How it reached the radio (decided 1 November 2026: here only, not in the conversation).
+        Signal.forMessage(message)?.let { item { Note(it) } }
         when {
             message.outgoing && SentStatus.canRetry(message.status) -> item { WideChip("Retry") { onRetry() } }
             message.outgoing -> Unit

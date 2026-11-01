@@ -84,6 +84,8 @@ class RoomMessageStore(private val db: WearMeshDatabase, override val address: S
                 body = message.body,
                 sentAt = message.sentAt,
                 receivedAt = message.receivedAt,
+                snr = message.snr,
+                hops = message.hops,
             )
             if (dao.insertMessage(row) == -1L) return@Callable false
             dao.trim(address, message.conversation, MessageStore.KEEP_PER_CONVERSATION)

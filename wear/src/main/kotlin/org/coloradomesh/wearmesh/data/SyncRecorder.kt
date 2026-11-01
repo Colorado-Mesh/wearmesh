@@ -156,14 +156,14 @@ class SyncRecorder(
     override fun onChannelMessage(message: ChannelMessage) {
         if (!afterFinish("a channel message")) {
             val split = MessageText.split(message.text)
-            add(IncomingMessage(Conversations.channel(message.channelIndex), split.sender, split.body, message.timestamp, clock()))
+            add(IncomingMessage(Conversations.channel(message.channelIndex), split.sender, split.body, message.timestamp, clock(), message.snr, message.hops))
         }
         also.onChannelMessage(message)
     }
 
     override fun onDirectMessage(message: DirectMessage) {
         if (!afterFinish("a direct message")) {
-            add(IncomingMessage(Conversations.direct(message.senderPrefixHex), "", message.text, message.timestamp, clock()))
+            add(IncomingMessage(Conversations.direct(message.senderPrefixHex), "", message.text, message.timestamp, clock(), message.snr, message.hops))
         }
         also.onDirectMessage(message)
     }

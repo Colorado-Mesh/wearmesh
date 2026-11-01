@@ -155,6 +155,7 @@ The biggest unknown is BLE behavior on the Pixel Watch 5, tested in the first mi
 - [x] Target watch: Pixel Watch 5 first.
 - [x] Dictation: works offline on the Pixel Watch 5 (M0); it needs a confirmation tap before the text is returned.
 - [x] Direct messages to known contacts are in v1.
+- [x] Signal and hops (decided 1 November 2026): the message screen (tap a message) shows how a received message reached the radio, such as "SNR 6.5 dB · 3 hops": the SNR of the last hop the radio heard it on, and for a flooded message the repeaters it passed through ("no repeaters" when heard from the sender). A message that came along a known route has no hop count, so none is shown; older firmware gives no SNR, but still the hop count, so its line is the hops alone ("2 hops"). The conversation list is unchanged. Stored from schema version 5; messages from before have none.
 - [x] Contacts you message are kept on the radio (decided 1 November 2026), behind Settings › Keep contacts on radio, off by default: each is made a favourite there, and one the radio drops is put back from the watch's copy, after each full read and when a direct message to it is refused ([keeping-contacts.md](keeping-contacts.md)). This saves contacts to the radio, which the non-goals otherwise leave to the phone, but only ones the radio already had.
 - [x] Repository: wearmesh, within Colorado Mesh, same licensing as MeshCore TAK Bridge.
 - [x] Packet size: the Pixel Watch 5 gets 244 bytes (MTU 247), above the 172 the protocol needs, so every frame fits (M0).
