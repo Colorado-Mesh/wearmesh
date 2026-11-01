@@ -114,6 +114,13 @@ interface MessageStore {
     /** The stored contact for the direct-message conversation with [prefix], if the watch has it. */
     fun directContact(prefix: String): KeptContact? = null
 
+    /**
+     * Deletes [conversation]'s messages, including any still waiting to send. For a direct
+     * conversation the contact stays, still counted as someone the user messages (decided
+     * 1 November 2026). Returns the ids of the watch's failed messages in it, whose notifications go.
+     */
+    fun deleteConversation(conversation: String): List<Long> = emptyList()
+
     /** The names of the contacts marked as favourites on the radio, as last read. */
     fun favouriteNames(): List<String>
 

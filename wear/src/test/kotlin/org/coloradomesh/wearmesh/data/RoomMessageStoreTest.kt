@@ -312,6 +312,28 @@ class RoomMessageStoreTest {
     }
 
     @Test
+    fun deletingADirectConversationKeepsItsContact() {
+        store.saveContacts(listOf(contact('b', "Bo")), readAt = 1_800_000_000_000)
+        store.addMessage(message("hi", conversation = "d:bbbbbbbbbbbb", sender = ""))
+        val failed = store.addOutgoing("d:bbbbbbbbbbbb", "W0RMT", "OK", 1_800_000_060_000)
+        store.setOutgoingStatus(failed, OutgoingStatus.NO_CONTACT)
+        store.addMessage(message("on Public"))
+
+        assertEquals(listOf(failed), store.deleteConversation("d:bbbbbbbbbbbb"))
+        assertTrue(bodies("d:bbbbbbbbbbbb").isEmpty())
+        assertEquals(listOf("on Public"), bodies())
+        // Still someone the user messages: kept, and put back after a drop.
+        assertEquals(listOf("Bo"), store.directContacts().map { it.name })
+        store.saveContacts(emptyList(), readAt = 1_800_003_600_000)
+        store.dropContactsNotSeenSince(1_800_003_600_000)
+        assertEquals("Bo", store.directContact("bbbbbbbbbbbb")?.name)
+        // Forgetting the radio forgets that too.
+        store.forget()
+        store.open()
+        assertTrue(store.directContacts().isEmpty())
+    }
+
+    @Test
     fun newMessageListsFavouriteCompanionsThenTheMostRecentlyHeard() = runBlocking {
         store.saveContacts(
             listOf(

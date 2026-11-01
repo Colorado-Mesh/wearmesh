@@ -17,6 +17,7 @@ class RoomMessageStore(private val db: WearMeshDatabase, override val address: S
             dao.clearMessages(address)
             dao.clearChannels(address)
             dao.clearContacts(address)
+            dao.clearKeptContacts(address)
             dao.clearRadio(address)
         },
     )
@@ -41,6 +42,17 @@ class RoomMessageStore(private val db: WearMeshDatabase, override val address: S
     )
 
     override fun favouriteNames(): List<String> = dao.favouriteNames(address)
+
+    override fun deleteConversation(conversation: String): List<Long> = db.runInTransaction(
+        Callable {
+            val failed = dao.failedIn(address, conversation)
+            if (conversation.startsWith("d:")) {
+                for (key in dao.keysWithPrefix(address, conversation.removePrefix("d:"))) dao.keepContact(KeptContactRow(address, key))
+            }
+            dao.deleteConversation(address, conversation)
+            failed
+        },
+    )
 
     override fun directContacts(): List<KeptContact> =
         dao.directContacts(address).map { KeptContact(it.publicKey, it.name, it.type, it.lastAdvert) }
