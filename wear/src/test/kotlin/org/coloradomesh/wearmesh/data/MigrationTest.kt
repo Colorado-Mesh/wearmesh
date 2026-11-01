@@ -73,7 +73,7 @@ class MigrationTest {
             close()
         }
         val opened = Room.databaseBuilder(context, WearMeshDatabase::class.java, name)
-            .addMigrations(WearMeshDatabase.MIGRATION_2_3, WearMeshDatabase.MIGRATION_3_4)
+            .addMigrations(WearMeshDatabase.MIGRATION_2_3, WearMeshDatabase.MIGRATION_3_4, WearMeshDatabase.MIGRATION_4_5)
             .allowMainThreadQueries()
             .build()
         db = opened
@@ -98,12 +98,39 @@ class MigrationTest {
             close()
         }
         val opened = Room.databaseBuilder(context, WearMeshDatabase::class.java, name)
-            .addMigrations(WearMeshDatabase.MIGRATION_2_3, WearMeshDatabase.MIGRATION_3_4)
+            .addMigrations(WearMeshDatabase.MIGRATION_2_3, WearMeshDatabase.MIGRATION_3_4, WearMeshDatabase.MIGRATION_4_5)
             .allowMainThreadQueries()
             .build()
         db = opened
         val store = RoomMessageStore(opened, "F3:9E:35:24:99:76")
         assertTrue(store.hasContact("aaaaaaaaaaaa"))
         assertEquals(emptyList<String>(), store.favouriteNames())
+    }
+
+    @Test
+    fun version4KeepsItsMessagesAndGainsSignalAndHops() {
+        createFromSchema(4).apply {
+            execSQL(
+                "INSERT INTO messages (radio, conversation, sender, body, sent_at, received_at, read, outgoing) " +
+                    "VALUES ('F3:9E:35:24:99:76', 'c:0', 'Ann', 'Hey!', 1700000900, 1800000000000, 1, 0)",
+            )
+            close()
+        }
+        val opened = Room.databaseBuilder(context, WearMeshDatabase::class.java, name)
+            .addMigrations(WearMeshDatabase.MIGRATION_2_3, WearMeshDatabase.MIGRATION_3_4, WearMeshDatabase.MIGRATION_4_5)
+            .allowMainThreadQueries()
+            .build()
+        db = opened
+        val kept = opened.dao().messages("F3:9E:35:24:99:76", "c:0").single()
+        assertEquals("Hey!", kept.body)
+        assertNull(kept.snr)
+        assertNull(kept.hops)
+
+        // And the new columns work.
+        val store = RoomMessageStore(opened, "F3:9E:35:24:99:76")
+        store.addMessage(IncomingMessage("c:0", "Bo", "73", 1_700_000_950, 1_800_000_100_000, snr = 6.25, hops = 3))
+        val heard = opened.dao().messages("F3:9E:35:24:99:76", "c:0").last()
+        assertEquals(6.25, heard.snr!!, 1e-9)
+        assertEquals(3, heard.hops)
     }
 }

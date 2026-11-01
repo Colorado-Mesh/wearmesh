@@ -74,6 +74,10 @@ data class MessageRow(
     @ColumnInfo(defaultValue = "0") val outgoing: Boolean = false,
     /** For a message this watch sent, an [OutgoingStatus] name; null for one received. */
     val status: String? = null,
+    /** For one received: the signal of the last hop it was heard on, in dB, when the radio gave it (schema version 5). */
+    val snr: Double? = null,
+    /** For one received and flooded: repeaters it passed through, 0 when heard from the sender; null otherwise. */
+    val hops: Int? = null,
 )
 
 /** A conversation's newest message and how many of its messages are unread, for Home. */

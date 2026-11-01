@@ -29,6 +29,10 @@ data class IncomingMessage(
     val sentAt: Long,
     /** Milliseconds by the watch's clock. */
     val receivedAt: Long,
+    /** The signal of the last hop, in dB, when the radio gave it. */
+    val snr: Double? = null,
+    /** Repeaters passed through when flooded, 0 when heard from the sender; null when not known. */
+    val hops: Int? = null,
 )
 
 /** Where a message this watch sent has got to (M3). */
