@@ -167,6 +167,8 @@ class SpikeService : Service() {
                 }
 
                 override fun sendDirectText(publicKeyHex: String, text: String): Long? = link.get()?.sendDirectText(publicKeyHex, text)
+
+                override fun saveContact(contact: Contact): Boolean = link.get()?.saveContact(contact) == true
             },
             { SpikeLog.log(it) },
             onFailed = { message, status, why -> Notifier.failed(this, target, message, status, why) },
@@ -206,6 +208,8 @@ class SpikeService : Service() {
             // Gathered and notified once the radio's queue is empty (see onQueueEmpty), so a burst
             // after reconnecting is one update, not one per message.
             onStored = { message -> toNotify.add(message) },
+            // The people you message, put back on the radio or made favourites there (ContactKeeper).
+            onKeep = { contacts -> for (contact in contacts) link.get()?.saveContact(contact) },
         )
         recorder = sync
         val opened = RadioSession(

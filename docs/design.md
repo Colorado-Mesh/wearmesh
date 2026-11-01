@@ -155,6 +155,7 @@ The biggest unknown is BLE behavior on the Pixel Watch 5, tested in the first mi
 - [x] Target watch: Pixel Watch 5 first.
 - [x] Dictation: works offline on the Pixel Watch 5 (M0); it needs a confirmation tap before the text is returned.
 - [x] Direct messages to known contacts are in v1.
+- [x] Contacts you message are kept on the radio (decided 1 November 2026): each is made a favourite there, and one the radio drops is put back from the watch's copy, after each full read and when a direct message to it is refused ([keeping-contacts.md](keeping-contacts.md)). This saves contacts to the radio, which the non-goals otherwise leave to the phone, but only ones the radio already had.
 - [x] Repository: wearmesh, within Colorado Mesh, same licensing as MeshCore TAK Bridge.
 - [x] Packet size: the Pixel Watch 5 gets 244 bytes (MTU 247), above the 172 the protocol needs, so every frame fits (M0).
 - [x] Screen off: the link held for 31 and 95 minutes and messages arrived live (M0).

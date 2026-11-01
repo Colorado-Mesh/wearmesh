@@ -18,6 +18,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.coloradomesh.meshcore.ble.RadioSession
 import org.coloradomesh.meshcore.protocol.CompanionClient
+import org.coloradomesh.meshcore.protocol.Contact
 import org.coloradomesh.meshcore.protocol.DirectOutcome
 import org.coloradomesh.meshcore.protocol.SelfInfo
 import org.coloradomesh.wearmesh.data.Delays
@@ -72,6 +73,9 @@ object CheckInRun {
      */
     const val SEND_LIMIT_MS = 200_000L
     private const val CLOSE_WAIT_MS = 5_000L
+
+    /** How long a full read waits for the radio to answer the contacts it saves; each takes well under a second. */
+    private const val KEEP_WAIT_MS = 15_000L
 
     /** Night 2 of step 1 saw one check-in need all 3 tries after Bluetooth status 133. */
     private const val CONNECT_TRIES = 4
@@ -194,11 +198,23 @@ object CheckInRun {
                 }
 
                 override fun sendDirectText(publicKeyHex: String, text: String): Long? = link.get()?.sendDirectText(publicKeyHex, text)
+
+                override fun saveContact(contact: Contact): Boolean = link.get()?.saveContact(contact) == true
             },
             { SpikeLog.log("Check-in: $it") },
             onFailed = { message, status, why -> Notifier.failed(app, address, message, status, why) },
         )
         val sendsDone = CompletableDeferred<Unit>()
+
+        // A full read saves the people you message back to the radio (ContactKeeper); the
+        // check-in waits for the radio's answers before disconnecting, or they could be cut off.
+        val keptDone = CompletableDeferred<Unit>()
+        val keepLock = Any()
+        val keepWaiting = HashSet<String>()
+        var keepPlanned = false
+        fun keepCheck() {
+            if (keepPlanned && keepWaiting.isEmpty()) keptDone.complete(Unit)
+        }
 
         // Called on the link's threads with the protocol client locked: nothing here may block.
         val listener = object : CompanionClient.Listener {
@@ -215,6 +231,11 @@ object CheckInRun {
                 if (outcome.isCompleted) return
                 if (sendLimitMs > 0) sender.sendPending { sendsDone.complete(Unit) } else sendsDone.complete(Unit)
                 outcome.complete(Outcome.Drained)
+            }
+
+            override fun onContactSaved(publicKeyHex: String, saved: Boolean, errorCode: Int?) = synchronized(keepLock) {
+                keepWaiting.remove(publicKeyHex)
+                keepCheck()
             }
 
             // Ends the check-in at once, rather than at the time limit with the radio held all along.
@@ -239,6 +260,16 @@ object CheckInRun {
             log = { SpikeLog.log("Check-in: $it") },
             also = listener,
             onStored = { newlyStored.add(it) },
+            onKeep = { contacts ->
+                synchronized(keepLock) { keepWaiting.addAll(contacts.map { it.publicKeyHex }) }
+                for (contact in contacts) {
+                    if (link.get()?.saveContact(contact) != true) synchronized(keepLock) { keepWaiting.remove(contact.publicKeyHex) }
+                }
+                synchronized(keepLock) {
+                    keepPlanned = true
+                    keepCheck()
+                }
+            },
         )
         val session = RadioSession(
             context = app,
@@ -267,6 +298,11 @@ object CheckInRun {
             if (collected == Outcome.Drained && sendLimitMs > 0) {
                 if (withTimeoutOrNull(sendLimitMs) { sendsDone.await() } == null) {
                     SpikeLog.log("Check-in: messages still sending after ${sendLimitMs / 1000} s; disconnecting")
+                }
+            }
+            if (collected == Outcome.Drained && plan.fullRead) {
+                if (withTimeoutOrNull(KEEP_WAIT_MS) { keptDone.await() } == null) {
+                    SpikeLog.log("Check-in: contacts still being saved to the radio after ${KEEP_WAIT_MS / 1000} s; disconnecting")
                 }
             }
             collected

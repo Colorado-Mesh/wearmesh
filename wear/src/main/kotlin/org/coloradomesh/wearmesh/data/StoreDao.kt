@@ -39,8 +39,19 @@ interface StoreDao {
     @Upsert
     fun saveContacts(contacts: List<ContactRow>)
 
-    @Query("DELETE FROM contacts WHERE radio = :radio AND seen_at < :readAt")
+    /** Keeps those with a direct-message conversation, so the watch can put them back on the radio. */
+    @Query(
+        "DELETE FROM contacts WHERE radio = :radio AND seen_at < :readAt AND NOT EXISTS " +
+            "(SELECT 1 FROM messages m WHERE m.radio = contacts.radio AND m.conversation = 'd:' || contacts.prefix)",
+    )
     fun dropContactsNotSeenSince(radio: String, readAt: Long)
+
+    /** Contacts with a direct-message conversation (decided 1 November 2026: each is kept on the radio as a favourite). */
+    @Query(
+        "SELECT * FROM contacts c WHERE c.radio = :radio AND EXISTS " +
+            "(SELECT 1 FROM messages m WHERE m.radio = c.radio AND m.conversation = 'd:' || c.prefix) ORDER BY c.name",
+    )
+    fun directContacts(radio: String): List<ContactRow>
 
     /**
      * Contacts the radio did not list in the read at [readAt] that matter to the user: favourites,

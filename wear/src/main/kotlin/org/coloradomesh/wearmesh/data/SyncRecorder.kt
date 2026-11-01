@@ -5,6 +5,7 @@ import org.coloradomesh.meshcore.protocol.ChannelMessage
 import org.coloradomesh.meshcore.protocol.CompanionClient
 import org.coloradomesh.meshcore.protocol.Contact
 import org.coloradomesh.meshcore.protocol.DirectMessage
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executor
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -19,7 +20,8 @@ import java.util.concurrent.atomic.AtomicInteger
  * after the read, or a read the radio never finished.
  *
  * On a full read ([plan]), contacts the radio no longer has are dropped after the contact list
- * read, and the read is recorded as complete only once that and an answer for every channel slot
+ * read (except those with a direct-message conversation, which [ContactKeeper] has [onKeep] save
+ * back to the radio, as favourites, along with any such contact not yet a favourite), and the read is recorded as complete only once that and an answer for every channel slot
  * have both come; otherwise the next sync reads everything again. A message the store already has
  * is counted in [duplicates] and logged, not stored again.
  *
@@ -35,7 +37,14 @@ class SyncRecorder(
     private val also: CompanionClient.Listener = object : CompanionClient.Listener {},
     /** Each message newly stored, on the storage thread, right after it is written; for notifications. */
     private val onStored: (IncomingMessage) -> Unit = {},
+    /**
+     * After a full read's contact list is stored, on the storage thread: the contacts to save to
+     * the radio (possibly none). Called once per full read; the caller hands each to the radio.
+     */
+    private val onKeep: (List<Contact>) -> Unit = {},
 ) : CompanionClient.Listener by also {
+    /** Names of the contacts handed to [onKeep] and not yet answered for, by key, for the log. */
+    private val keeping = ConcurrentHashMap<String, String>()
     /** Every contact this connection reads is marked with this time, and a full read with it. */
     private val readAt = clock()
     private val contacts = ArrayList<Contact>()
@@ -73,6 +82,11 @@ class SyncRecorder(
                 for (gone in store.dropContactsNotSeenSince(readAt)) log(Favourites.dropped(gone))
                 // A node heard advertising during the read can come twice; the store keeps one of each.
                 log(Favourites.summary(batch.distinctBy { it.publicKeyHex }.size, store.favouriteNames()))
+                val keep = ContactKeeper.plan(batch, store.directContacts())
+                for (contact in keep.restore) log("Contacts: putting ${contact.name} (${contact.publicKeyHex.take(12)}) back on the radio, as a favourite")
+                for (contact in keep.favourite) log("Contacts: making ${contact.name} (${contact.publicKeyHex.take(12)}) a favourite on the radio, as someone you message")
+                for (contact in keep.all) keeping[contact.publicKeyHex] = contact.name
+                onKeep(keep.all)
             }
             store.setContactsSince(lastModified)
         }
@@ -81,6 +95,15 @@ class SyncRecorder(
             markFullReadIfComplete()
         }
         also.onContactsRead(lastModified)
+    }
+
+    override fun onContactSaved(publicKeyHex: String, saved: Boolean, errorCode: Int?) {
+        val name = keeping.remove(publicKeyHex) ?: publicKeyHex.take(12)
+        if (!saved) {
+            val why = errorCode?.let { "error $it" } ?: "no answer"
+            log("Contacts: the radio did not take $name ($why); if its list is full, set it to overwrite the oldest, or to add only chat users")
+        }
+        also.onContactSaved(publicKeyHex, saved, errorCode)
     }
 
     override fun onChannelSlotsUnanswered(slots: Set<Int>) {

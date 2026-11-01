@@ -40,6 +40,12 @@ class RoomMessageStore(private val db: WearMeshDatabase, override val address: S
 
     override fun favouriteNames(): List<String> = dao.favouriteNames(address)
 
+    override fun directContacts(): List<KeptContact> =
+        dao.directContacts(address).map { KeptContact(it.publicKey, it.name, it.type, it.lastAdvert) }
+
+    override fun directContact(prefix: String): KeptContact? =
+        dao.directContacts(address).firstOrNull { it.prefix == prefix.lowercase() }?.let { KeptContact(it.publicKey, it.name, it.type, it.lastAdvert) }
+
     override fun setContactsSince(since: Long) = dao.setContactsSince(address, since)
 
     override fun saveChannels(channels: List<Channel>, unanswered: Set<Int>): Int = db.runInTransaction(

@@ -286,6 +286,11 @@ class RoomMessageStoreTest {
         )
         assertFalse(store.hasContact("aaaaaaaaaaaa"))
         assertTrue(store.favouriteNames().isEmpty())
+        // Bo, whom the watch has messaged, is kept, so the watch can put him back on the radio.
+        assertTrue(store.hasContact("bbbbbbbbbbbb"))
+        assertEquals(listOf(KeptContact("b".repeat(64), "Bo", Contact.TYPE_COMPANION, 1_700_000_000)), store.directContacts())
+        assertEquals("Bo", store.directContact("BBBBBBBBBBBB")?.name)
+        assertNull(store.directContact("cccccccccccc"))
     }
 
     @Test

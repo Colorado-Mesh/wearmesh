@@ -41,6 +41,8 @@ class OutboxSenderTest {
         }
         val contacts = HashSet<String>()
         override fun hasContact(prefix: String) = prefix in contacts
+        val kept = ArrayList<KeptContact>()
+        override fun directContact(prefix: String) = kept.firstOrNull { it.prefix == prefix }
         override fun retryOutgoing(id: Long, at: Long): Boolean {
             if (statuses[id] != OutgoingStatus.FAILED && statuses[id] != OutgoingStatus.NO_CONTACT) return false
             statuses[id] = OutgoingStatus.SENDING
@@ -65,6 +67,11 @@ class OutboxSenderTest {
             if (directsRefused) return null
             sent.add("d:$publicKeyHex $text")
             return nextId++
+        }
+
+        override fun saveContact(contact: Contact): Boolean {
+            sent.add("save ${contact.name} flags ${contact.flags} path ${contact.outPathLen}")
+            return true
         }
     }
 
@@ -132,6 +139,39 @@ class OutboxSenderTest {
         // The radio says it has no such contact.
         assertEquals(OutgoingStatus.NO_CONTACT, store.statuses[refused])
         assertTrue(log.last().endsWith("failed: your radio does not have this contact (its list may be full)"))
+    }
+
+    @Test
+    fun aRecipientTheRadioDroppedIsPutBackAndSentToOnce() {
+        store.kept.add(KeptContact("0000000000ff" + "11".repeat(26), "W0RMT-M9", Contact.TYPE_COMPANION, 1_700_000_000))
+        val id = write("d:0000000000ff", "Yes")
+        sender.sendPending()
+        runWrites()
+        sender.onDirectRefused(100, CompanionClient.ERROR_NOT_FOUND)
+        sender.onDirectResult(100, DirectOutcome.REFUSED)
+        runWrites()
+        // Saved back as a favourite with no known route, then sent again: the radio takes them in that order.
+        assertEquals(listOf("d:0000000000ff Yes", "save W0RMT-M9 flags 1 path -1", "d:0000000000ff Yes"), radio.sent)
+        assertEquals(OutgoingStatus.SENDING, store.statuses[id])
+        sender.onDirectResult(101, DirectOutcome.DELIVERED)
+        runWrites()
+        assertEquals(OutgoingStatus.DELIVERED, store.statuses[id])
+    }
+
+    @Test
+    fun aSecondRefusalAfterPuttingTheContactBackFails() {
+        store.kept.add(KeptContact("0000000000ff" + "11".repeat(26), "W0RMT-M9", Contact.TYPE_COMPANION, 1_700_000_000))
+        val id = write("d:0000000000ff", "Yes")
+        sender.sendPending()
+        runWrites()
+        sender.onDirectRefused(100, CompanionClient.ERROR_NOT_FOUND)
+        sender.onDirectResult(100, DirectOutcome.REFUSED)
+        runWrites()
+        sender.onDirectRefused(101, CompanionClient.ERROR_NOT_FOUND)
+        sender.onDirectResult(101, DirectOutcome.REFUSED)
+        runWrites()
+        assertEquals(OutgoingStatus.NO_CONTACT, store.statuses[id])
+        assertEquals(3, radio.sent.size)
     }
 
     @Test

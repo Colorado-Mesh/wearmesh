@@ -14,8 +14,8 @@ android {
         // Wear OS 4: the Android 12 Bluetooth permissions and notification permission always apply.
         minSdk = 33
         targetSdk = 34
-        versionCode = 17
-        versionName = "0.0.17-m4-glance-changes"
+        versionCode = 18
+        versionName = "0.0.18-keep-contacts"
     }
 
     buildTypes {

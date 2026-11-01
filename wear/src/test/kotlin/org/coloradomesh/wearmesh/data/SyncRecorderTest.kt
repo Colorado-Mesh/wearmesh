@@ -53,6 +53,8 @@ class SyncRecorderTest {
         override fun setOutgoingStatus(id: Long, status: OutgoingStatus) {}
         override fun retryOutgoing(id: Long, at: Long) = false
         override fun hasContact(prefix: String) = false
+        var direct = emptyList<KeptContact>()
+        override fun directContacts() = direct
     }
 
     private val store = FakeStore()
@@ -77,10 +79,43 @@ class SyncRecorderTest {
         override fun onQueueEmpty() { passedOn.add("queue empty") }
     }
 
+    private val kept = ArrayList<List<String>>()
+
     private fun recorder(full: Boolean) =
-        SyncRecorder(store, SyncPlan(full, if (full) 0 else 1_700_000_500), writer, { log.add(it) }, { now }, downstream)
+        SyncRecorder(store, SyncPlan(full, if (full) 0 else 1_700_000_500), writer, { log.add(it) }, { now }, downstream, onKeep = { list ->
+            kept.add(list.map { "${it.name} ${it.flags} ${it.outPathLen}" })
+        })
 
     private fun contact(name: String) = Contact("ab".repeat(32), Contact.TYPE_COMPANION, name, 0, 0.0, 0.0)
+
+    @Test
+    fun aFullReadKeepsThePeopleYouMessageOnTheRadio() {
+        store.direct = listOf(
+            KeptContact("aa".repeat(32), "Ann", Contact.TYPE_COMPANION, 0),
+            KeptContact("cc".repeat(32), "Cy", Contact.TYPE_COMPANION, 0),
+            KeptContact("dd".repeat(32), "Di", Contact.TYPE_COMPANION, 0),
+        )
+        val recorder = recorder(full = true)
+        recorder.onContact(Contact("aa".repeat(32), Contact.TYPE_COMPANION, "Ann", 0, 0.0, 0.0, outPathLen = 2))
+        recorder.onContact(Contact("dd".repeat(32), Contact.TYPE_COMPANION, "Di", 0, 0.0, 0.0, flags = Contact.FLAG_FAVOURITE))
+        recorder.onContactsRead(1_700_000_600)
+        runWrites()
+        // Ann made a favourite with her route kept; Cy, dropped, put back; Di already a favourite.
+        assertEquals(listOf(listOf("Cy 1 -1", "Ann 1 2")), kept)
+        assertTrue(log.contains("Contacts: putting Cy (cccccccccccc) back on the radio, as a favourite"))
+        assertTrue(log.contains("Contacts: making Ann (aaaaaaaaaaaa) a favourite on the radio, as someone you message"))
+        recorder.onContactSaved("cc".repeat(32), saved = false, errorCode = 3)
+        assertTrue(log.last().startsWith("Contacts: the radio did not take Cy (error 3)"))
+    }
+
+    @Test
+    fun aBriefReadKeepsNothing() {
+        store.direct = listOf(KeptContact("cc".repeat(32), "Cy", Contact.TYPE_COMPANION, 0))
+        val recorder = recorder(full = false)
+        recorder.onContactsRead(1_700_000_600)
+        runWrites()
+        assertTrue(kept.isEmpty())
+    }
 
     @Test
     fun aFullReadStoresContactsInOneGoThenDropsTheRest() {
