@@ -180,8 +180,9 @@ Four milestones, each ending in a go/no-go check; the first is a throwaway spike
    - Complete (30 October 2026): every field-test check passed, the reply from a notification after adding Quick reply, since the Pixel Watch does not show quick replies given to a notification's reply.
 5. **M4 — Tile and complication.** Unread count, Check now and the newest message on a Tile; an unread-count complication.
    - Decided (30 October 2026): the count is unread messages in conversations whose notifications are on; the Tile shows the newest two unread messages, the status line and mode, and Check now (opening the app), Quick reply and Open WearMesh; the complication shows the count with the icon (the icon alone when nothing is unread) or, in a wide slot, when the last sync was.
-   - Steps: (1) complication, [M4-step1-complication.md](M4-step1-complication.md); (2) Tile, [M4-step2-tile.md](M4-step2-tile.md); (3) a day's carry.
+   - Steps: (1) complication, [M4-step1-complication.md](M4-step1-complication.md); (2) Tile, [M4-step2-tile.md](M4-step2-tile.md); (3) carry, [M4-step3-carry.md](M4-step3-carry.md).
    - Changed (31 October 2026): the Tile shows the last two messages heard, read or not, from any conversation; the complication can count one channel chosen in Settings › Complication, showing the count over the channel's short name ([M4-glance-changes.md](M4-glance-changes.md)).
+   - Complete (1 November 2026): the carry used no more battery than M2 (about 0.8% an hour overnight in Check-in, about 2% an hour in Live), once wireless debugging, which had doubled the drain, was off ([M4-step3-carry.md](M4-step3-carry.md)). A day on stock MeshCore firmware found no differences from zephcore ([stock-firmware.md](stock-firmware.md)).
 
 **M0 results (23 October 2026): complete**
 
