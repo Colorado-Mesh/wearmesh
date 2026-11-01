@@ -193,6 +193,8 @@ object CheckInRun {
 
         // The outbox goes over this connection once the queue is collected.
         val link = AtomicReference<RadioSession?>(null)
+        // Made after the sender, which reaches it through this.
+        val recorderRef = AtomicReference<SyncRecorder?>(null)
         val sender = OutboxSender(
             store,
             Storage.writer,
@@ -204,7 +206,11 @@ object CheckInRun {
                 override fun sendDirectText(publicKeyHex: String, text: String): Long? = link.get()?.sendDirectText(publicKeyHex, text)
 
                 // Only with Settings › Keep contacts on radio on: otherwise the watch never changes the radio's contacts.
-                override fun saveContact(contact: Contact): Boolean = keepingNow() && link.get()?.saveContact(contact) == true
+                override fun saveContact(contact: Contact): Boolean {
+                    if (!keepingNow()) return false
+                    recorderRef.get()?.saving(contact)
+                    return link.get()?.saveContact(contact) == true
+                }
             },
             { SpikeLog.log("Check-in: $it") },
             onFailed = { message, status, why -> Notifier.failed(app, address, message, status, why) },
@@ -277,6 +283,7 @@ object CheckInRun {
             },
             keepContacts = keepContacts,
         )
+        recorderRef.set(recorder)
         val session = RadioSession(
             context = app,
             address = address,

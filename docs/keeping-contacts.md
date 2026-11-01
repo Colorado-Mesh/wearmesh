@@ -46,8 +46,10 @@ These settings keep the list from filling with nodes you never message, and need
 
 ## Testing on the watch
 
-0. **Off by default.** Before turning it on, a full read (Settings › Read channels and contacts again) changes nothing on the radio, and the log names anyone you message who is missing. Then turn on Settings › Keep contacts on radio.
-1. **Favourites.** After the next full read (Settings › Read channels and contacts again), the log makes each person you have messaged a favourite, and the phone app shows them as favourites.
+A full read is what these checks need. In Check-in, use Settings › **Read channels and contacts again**. In Live, that is turned off while the link is up, but Live reads everything each time it connects: switch Settings › Mode to Check-in and back to Live, or use the read in Check-in.
+
+0. **Off by default.** Before turning it on, a full read changes nothing on the radio, and the log names anyone you message who is missing. Then turn on Settings › Keep contacts on radio.
+1. **Favourites.** After the next full read, the log makes each person you have messaged a favourite, and the phone app shows them as favourites.
 2. **A drop.** When the log next says the radio no longer lists someone you message, the next lines put them back. A direct message to them is Delivered.
 3. **A refusal.** Send a direct message to someone the radio has just dropped, before the next full read: the log shows them put back and the message sent again, and it ends Delivered or Not confirmed rather than Failed.
 4. **Stock firmware.** The same on the WisMesh Tag, where favourites and error 2 are still untested.

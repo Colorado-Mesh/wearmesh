@@ -174,7 +174,11 @@ class SpikeService : Service() {
                 override fun sendDirectText(publicKeyHex: String, text: String): Long? = link.get()?.sendDirectText(publicKeyHex, text)
 
                 // Only with Settings › Keep contacts on radio on: otherwise the watch never changes the radio's contacts.
-                override fun saveContact(contact: Contact): Boolean = keepingNow() && link.get()?.saveContact(contact) == true
+                override fun saveContact(contact: Contact): Boolean {
+                    if (!keepingNow()) return false
+                    recorder?.saving(contact)
+                    return link.get()?.saveContact(contact) == true
+                }
             },
             { SpikeLog.log(it) },
             onFailed = { message, status, why -> Notifier.failed(this, target, message, status, why) },

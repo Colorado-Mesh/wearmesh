@@ -34,8 +34,8 @@ class RoomMessageStore(private val db: WearMeshDatabase, override val address: S
         Callable {
             val notable = dao.notableNotSeenSince(address, readAt).map { DroppedContact(it.name, it.prefix, it.favourite) }
             dao.dropContactsNotSeenSince(address, readAt)
-            // Those kept for their conversation are not on the radio, so not favourites there either.
-            dao.clearFavouritesNotSeenSince(address, readAt)
+            // Those kept for their conversation are not on the radio: marked so, and not favourites.
+            dao.markNotOnRadioSince(address, readAt)
             notable
         },
     )

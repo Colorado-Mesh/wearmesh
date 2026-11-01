@@ -115,6 +115,14 @@ class SyncRecorder(
         also.onContactsRead(lastModified)
     }
 
+    /**
+     * A save of [contact] handed to the radio from elsewhere (the outbox putting back a refused
+     * recipient), so that when the radio confirms it the store shows it as a favourite too.
+     */
+    fun saving(contact: Contact) {
+        keeping[contact.publicKeyHex] = contact
+    }
+
     override fun onContactSaved(publicKeyHex: String, saved: Boolean, errorCode: Int?) {
         val contact = keeping.remove(publicKeyHex)
         val name = contact?.name ?: publicKeyHex.take(12)

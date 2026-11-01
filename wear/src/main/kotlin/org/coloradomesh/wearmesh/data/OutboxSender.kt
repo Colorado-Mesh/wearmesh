@@ -209,6 +209,11 @@ class OutboxSender(
         if (kept != null && radio.saveContact(ContactKeeper.restored(kept))) {
             log("Outbox: the radio no longer listed ${kept.name}; putting them back, as a favourite, and sending again")
             handOver(message)
+        } else if (kept != null && synchronized(lock) { finished }) {
+            // The link closed before the contact could go back: the next connection tries again.
+            synchronized(lock) { inFlight.remove(message.id) }
+            log("Outbox: the connection ended before ${kept.name} could be put back; the message waits for the next")
+            runIfIdle()
         } else {
             end(message, OutgoingStatus.NO_CONTACT, NO_CONTACT_WHY)
         }

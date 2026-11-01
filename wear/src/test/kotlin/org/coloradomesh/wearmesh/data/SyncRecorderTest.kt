@@ -126,6 +126,18 @@ class SyncRecorderTest {
     }
 
     @Test
+    fun aSaveFromTheOutboxIsStoredOnceTheRadioTakesIt() {
+        val recorder = recorder(full = false)
+        val m9 = Contact("dd".repeat(32), Contact.TYPE_COMPANION, "W0RMT-M9", 0, 0.0, 0.0, flags = Contact.FLAG_FAVOURITE)
+        recorder.saving(m9)
+        runWrites()
+        assertTrue(store.calls.isEmpty())
+        recorder.onContactSaved(m9.publicKeyHex, saved = true, errorCode = null)
+        runWrites()
+        assertEquals(listOf("saveContacts [W0RMT-M9] at $now"), store.calls)
+    }
+
+    @Test
     fun aFullReadWhoseSweepFailedIsNotRecorded() {
         store.failDirect = true
         val recorder = recorder(full = true)

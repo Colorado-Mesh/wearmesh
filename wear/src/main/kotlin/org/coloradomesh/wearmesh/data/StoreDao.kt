@@ -46,9 +46,12 @@ interface StoreDao {
     )
     fun dropContactsNotSeenSince(radio: String, readAt: Long)
 
-    /** Kept contacts the radio did not list in the read at [readAt] are no longer its favourites. */
-    @Query("UPDATE contacts SET favourite = 0 WHERE radio = :radio AND seen_at < :readAt AND favourite = 1")
-    fun clearFavouritesNotSeenSince(radio: String, readAt: Long)
+    /**
+     * Kept contacts the radio did not list in the read at [readAt] are marked as not on the
+     * radio: seen at 0, and not favourites. Queries about what the radio lists leave them out.
+     */
+    @Query("UPDATE contacts SET favourite = 0, seen_at = 0 WHERE radio = :radio AND seen_at < :readAt")
+    fun markNotOnRadioSince(radio: String, readAt: Long)
 
     /** Contacts with a direct-message conversation (decided 1 November 2026: each is kept on the radio as a favourite). */
     @Query(
@@ -71,14 +74,15 @@ interface StoreDao {
     fun favouriteNames(radio: String): List<String>
 
     /** Companions (type 1) marked as favourites, by name; for New message. */
-    @Query("SELECT * FROM contacts WHERE radio = :radio AND type = 1 AND favourite = 1 ORDER BY name COLLATE NOCASE")
+    @Query("SELECT * FROM contacts WHERE radio = :radio AND type = 1 AND favourite = 1 AND seen_at > 0 ORDER BY name COLLATE NOCASE")
     fun favouriteCompanionsFlow(radio: String): Flow<List<ContactRow>>
 
     /** The [limit] companions heard most recently that are not favourites; for New message. */
-    @Query("SELECT * FROM contacts WHERE radio = :radio AND type = 1 AND favourite = 0 ORDER BY last_advert DESC LIMIT :limit")
+    @Query("SELECT * FROM contacts WHERE radio = :radio AND type = 1 AND favourite = 0 AND seen_at > 0 ORDER BY last_advert DESC LIMIT :limit")
     fun recentCompanionsFlow(radio: String, limit: Int): Flow<List<ContactRow>>
 
-    @Query("SELECT * FROM contacts WHERE radio = :radio AND prefix = :prefix LIMIT 1")
+    /** The contact the radio lists with [prefix]; null when it lists none, also for one the watch keeps. */
+    @Query("SELECT * FROM contacts WHERE radio = :radio AND prefix = :prefix AND seen_at > 0 LIMIT 1")
     fun contactFlow(radio: String, prefix: String): Flow<ContactRow?>
 
     @Query("SELECT * FROM channels WHERE radio = :radio ORDER BY slot")
@@ -154,7 +158,7 @@ interface StoreDao {
     )
     fun retry(radio: String, id: Long, at: Long): Int
 
-    @Query("SELECT EXISTS(SELECT 1 FROM contacts WHERE radio = :radio AND prefix = :prefix)")
+    @Query("SELECT EXISTS(SELECT 1 FROM contacts WHERE radio = :radio AND prefix = :prefix AND seen_at > 0)")
     fun hasContact(radio: String, prefix: String): Boolean
 
     @Query("SELECT * FROM messages WHERE radio = :radio AND id = :id")

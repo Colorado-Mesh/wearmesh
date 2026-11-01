@@ -69,7 +69,10 @@ class OutboxSenderTest {
             return nextId++
         }
 
+        var saveRefused = false
+
         override fun saveContact(contact: Contact): Boolean {
+            if (saveRefused) return false
             sent.add("save ${contact.name} flags ${contact.flags} path ${contact.outPathLen}")
             return true
         }
@@ -156,6 +159,22 @@ class OutboxSenderTest {
         sender.onDirectResult(101, DirectOutcome.DELIVERED)
         runWrites()
         assertEquals(OutgoingStatus.DELIVERED, store.statuses[id])
+    }
+
+    @Test
+    fun aRefusalWhoseLinkClosesFirstLeavesTheMessageWaiting() {
+        store.kept.add(KeptContact("0000000000ff" + "11".repeat(26), "W0RMT-M9", Contact.TYPE_COMPANION, 1_700_000_000))
+        val id = write("d:0000000000ff", "Yes")
+        sender.sendPending()
+        runWrites()
+        sender.onDirectRefused(100, CompanionClient.ERROR_NOT_FOUND)
+        sender.onDirectResult(100, DirectOutcome.REFUSED)
+        // The link closes before the storage thread gets to put the contact back.
+        radio.saveRefused = true
+        sender.finish()
+        runWrites()
+        assertEquals(OutgoingStatus.SENDING, store.statuses[id])
+        assertEquals(listOf("d:0000000000ff Yes"), radio.sent)
     }
 
     @Test
