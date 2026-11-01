@@ -96,6 +96,9 @@ class MainActivity : ComponentActivity() {
     /** The quick replies, as saved (M3 step 2). */
     private var quickReplies by mutableStateOf(QuickReplies.DEFAULTS)
 
+    /** Settings › Keep contacts on radio. */
+    private var keepContacts by mutableStateOf(false)
+
     /** What to do once permissions are granted. */
     private var afterPermissions: (() -> Unit)? = null
 
@@ -121,6 +124,7 @@ class MainActivity : ComponentActivity() {
         Notifier.createChannels(this)
         Notifier.loadChoices(this, Radios.state.value?.chosen?.address)
         quickReplies = QuickReplies.parse(Prefs.of(this).getString(Prefs.QUICK_REPLIES, null))
+        keepContacts = Prefs.of(this).getBoolean(Prefs.KEEP_CONTACTS, false)
         // A notification's conversation opens once: not again when the activity is recreated
         // after opening it, nor when it is relaunched from Recents.
         if (savedInstanceState?.getBoolean(OPENED_FROM_NOTIFICATION) != true) openFrom(intent)
@@ -661,6 +665,7 @@ class MainActivity : ComponentActivity() {
                         hasRadio = radios?.chosen != null,
                         syncing = sync.syncing,
                         notificationsAllowed = notificationsAllowed,
+                        keepContacts = keepContacts,
                     ),
                     onMode = {
                         switchMode(if (mode == Mode.Kind.LIVE) Mode.Kind.CHECK_IN else Mode.Kind.LIVE)
@@ -672,6 +677,11 @@ class MainActivity : ComponentActivity() {
                     onAllowAlarms = { openSettingsPage(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, withPackage = true) },
                     onNotifications = { nav.navigate(NOTIFICATIONS) },
                     onComplication = { nav.navigate(COMPLICATION) },
+                    onKeepContacts = {
+                        keepContacts = !keepContacts
+                        Prefs.of(this@MainActivity).edit().putBoolean(Prefs.KEEP_CONTACTS, keepContacts).apply()
+                        SpikeLog.log("Settings: keep contacts on radio ${if (keepContacts) "on; from the next full read" else "off"}")
+                    },
                     onQuickReplies = { nav.navigate(QUICK_REPLIES) },
                     onAllowNotifications = { openNotificationSettings() },
                     onReadEverything = {

@@ -6,7 +6,19 @@ Decided 1 November 2026, after the M4 nights showed the T1 dropping direct-messa
 
 A MeshCore companion radio adds every node it hears an advert from, until its contact list is full (about 350). With **Overwrite Oldest** on, as on the T1, it then drops the oldest contact that isn't a favourite to make room; with it off, it stops adding. A radio that no longer lists someone can neither send them a direct message (it refuses with error 2, shown as "Failed: contact not on radio") nor read one from them, until they advert again.
 
-## What the watch does
+## Opt-in: Settings › Keep contacts on radio
+
+This is the only time WearMesh changes anything on the radio besides its clock, so it is **off by default** (decided 1 November 2026, after review of meshcore-kotlin PR 8, whose rules forbid writing to the radio unless the user asks). Turn it on in Settings › **Keep contacts on radio**. It takes effect at the next full read.
+
+With it off, the watch changes nothing, and after a full read the log names anyone you message who is missing from the radio:
+
+```
+Contacts: not on the radio, though you message them: W0RMT-M9. Settings › Keep contacts on radio would put them back
+```
+
+The watch keeps its copy of everyone you message either way, so turning the setting on later can put back people dropped before.
+
+## What the watch does, with the setting on
 
 - **The people you message become favourites on the radio.** After each full read of the radio's contact list (hourly in Check-in, on each connection in Live), every contact with a direct-message conversation that is not yet a favourite is saved back to the radio with the favourite flag set, keeping its route and position as the radio gave them. The radio keeps favourites when it makes room.
 - **Dropped ones are put back.** The watch keeps the key, name and type of every contact you have messaged, even after the radio drops it. After a full read, any of them the radio no longer lists is saved back to it, as a favourite, with no known route: the first message floods, and the reply teaches the radio a path.
@@ -34,6 +46,7 @@ These settings keep the list from filling with nodes you never message, and need
 
 ## Testing on the watch
 
+0. **Off by default.** Before turning it on, a full read (Settings › Read channels and contacts again) changes nothing on the radio, and the log names anyone you message who is missing. Then turn on Settings › Keep contacts on radio.
 1. **Favourites.** After the next full read (Settings › Read channels and contacts again), the log makes each person you have messaged a favourite, and the phone app shows them as favourites.
 2. **A drop.** When the log next says the radio no longer lists someone you message, the next lines put them back. A direct message to them is Delivered.
 3. **A refusal.** Send a direct message to someone the radio has just dropped, before the next full read: the log shows them put back and the message sent again, and it ends Delivered or Not confirmed rather than Failed.

@@ -42,6 +42,11 @@ class SyncRecorder(
      * the radio (possibly none). Called once per full read; the caller hands each to the radio.
      */
     private val onKeep: (List<Contact>) -> Unit = {},
+    /**
+     * Whether the user has turned on Settings › Keep contacts on radio. Off, [onKeep] is given
+     * nothing, and the log says when someone you message is missing from the radio.
+     */
+    private val keepContacts: Boolean = false,
 ) : CompanionClient.Listener by also {
     /** Names of the contacts handed to [onKeep] and not yet answered for, by key, for the log. */
     private val keeping = ConcurrentHashMap<String, String>()
@@ -83,10 +88,18 @@ class SyncRecorder(
                 // A node heard advertising during the read can come twice; the store keeps one of each.
                 log(Favourites.summary(batch.distinctBy { it.publicKeyHex }.size, store.favouriteNames()))
                 val keep = ContactKeeper.plan(batch, store.directContacts())
-                for (contact in keep.restore) log("Contacts: putting ${contact.name} (${contact.publicKeyHex.take(12)}) back on the radio, as a favourite")
-                for (contact in keep.favourite) log("Contacts: making ${contact.name} (${contact.publicKeyHex.take(12)}) a favourite on the radio, as someone you message")
-                for (contact in keep.all) keeping[contact.publicKeyHex] = contact.name
-                onKeep(keep.all)
+                if (keepContacts) {
+                    for (contact in keep.restore) log("Contacts: putting ${contact.name} (${contact.publicKeyHex.take(12)}) back on the radio, as a favourite")
+                    for (contact in keep.favourite) log("Contacts: making ${contact.name} (${contact.publicKeyHex.take(12)}) a favourite on the radio, as someone you message")
+                    for (contact in keep.all) keeping[contact.publicKeyHex] = contact.name
+                    onKeep(keep.all)
+                } else {
+                    if (keep.restore.isNotEmpty()) {
+                        val who = keep.restore.joinToString { it.name }
+                        log("Contacts: not on the radio, though you message them: $who. Settings › Keep contacts on radio would put them back")
+                    }
+                    onKeep(emptyList())
+                }
             }
             store.setContactsSince(lastModified)
         }

@@ -158,6 +158,8 @@ class SpikeService : Service() {
         Storage.later { store.open() }
         // This link's own session, never a later one's: the sender is called on the storage thread.
         val link = AtomicReference<RadioSession?>(null)
+        // Read once per link: turning the setting on or off takes effect at the next connection.
+        val keepContacts = Prefs.of(this).getBoolean(Prefs.KEEP_CONTACTS, false)
         val sender = OutboxSender(
             store,
             Storage.writer,
@@ -168,7 +170,8 @@ class SpikeService : Service() {
 
                 override fun sendDirectText(publicKeyHex: String, text: String): Long? = link.get()?.sendDirectText(publicKeyHex, text)
 
-                override fun saveContact(contact: Contact): Boolean = link.get()?.saveContact(contact) == true
+                // Only with Settings › Keep contacts on radio on: otherwise the watch never changes the radio's contacts.
+                override fun saveContact(contact: Contact): Boolean = keepContacts && link.get()?.saveContact(contact) == true
             },
             { SpikeLog.log(it) },
             onFailed = { message, status, why -> Notifier.failed(this, target, message, status, why) },
@@ -210,6 +213,7 @@ class SpikeService : Service() {
             onStored = { message -> toNotify.add(message) },
             // The people you message, put back on the radio or made favourites there (ContactKeeper).
             onKeep = { contacts -> for (contact in contacts) link.get()?.saveContact(contact) },
+            keepContacts = keepContacts,
         )
         recorder = sync
         val opened = RadioSession(

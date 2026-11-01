@@ -81,10 +81,10 @@ class SyncRecorderTest {
 
     private val kept = ArrayList<List<String>>()
 
-    private fun recorder(full: Boolean) =
+    private fun recorder(full: Boolean, keepContacts: Boolean = true) =
         SyncRecorder(store, SyncPlan(full, if (full) 0 else 1_700_000_500), writer, { log.add(it) }, { now }, downstream, onKeep = { list ->
             kept.add(list.map { "${it.name} ${it.flags} ${it.outPathLen}" })
-        })
+        }, keepContacts = keepContacts)
 
     private fun contact(name: String) = Contact("ab".repeat(32), Contact.TYPE_COMPANION, name, 0, 0.0, 0.0)
 
@@ -106,6 +106,22 @@ class SyncRecorderTest {
         assertTrue(log.contains("Contacts: making Ann (aaaaaaaaaaaa) a favourite on the radio, as someone you message"))
         recorder.onContactSaved("cc".repeat(32), saved = false, errorCode = 3)
         assertTrue(log.last().startsWith("Contacts: the radio did not take Cy (error 3)"))
+    }
+
+    @Test
+    fun withTheSettingOffNothingIsSavedButTheLogSaysWhoIsMissing() {
+        store.direct = listOf(
+            KeptContact("aa".repeat(32), "Ann", Contact.TYPE_COMPANION, 0),
+            KeptContact("cc".repeat(32), "Cy", Contact.TYPE_COMPANION, 0),
+        )
+        val recorder = recorder(full = true, keepContacts = false)
+        recorder.onContact(Contact("aa".repeat(32), Contact.TYPE_COMPANION, "Ann", 0, 0.0, 0.0))
+        recorder.onContactsRead(1_700_000_600)
+        runWrites()
+        // Called, with nothing, so a check-in waiting on it is not held up.
+        assertEquals(listOf(emptyList<String>()), kept)
+        assertTrue(log.contains("Contacts: not on the radio, though you message them: Cy. Settings › Keep contacts on radio would put them back"))
+        assertTrue(log.none { it.contains("a favourite on the radio") })
     }
 
     @Test
