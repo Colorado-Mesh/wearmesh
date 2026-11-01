@@ -52,8 +52,8 @@ abstract class WearMeshDatabase : RoomDatabase() {
         val MIGRATION_5_6 = object : Migration(5, 6) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
-                    "CREATE TABLE IF NOT EXISTS `kept_contacts` (`radio` TEXT NOT NULL, `public_key` TEXT NOT NULL, " +
-                        "PRIMARY KEY(`radio`, `public_key`))",
+                    "CREATE TABLE IF NOT EXISTS `kept_contacts` (`radio` TEXT NOT NULL, `prefix` TEXT NOT NULL, " +
+                        "PRIMARY KEY(`radio`, `prefix`))",
                 )
             }
         }

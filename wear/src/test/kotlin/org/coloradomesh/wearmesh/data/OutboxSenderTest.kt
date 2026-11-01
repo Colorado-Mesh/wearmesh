@@ -219,6 +219,24 @@ class OutboxSenderTest {
     }
 
     @Test
+    fun aMessageWhoseConversationWasDeletedIsNotSentAgain() {
+        store.kept.add(KeptContact("0000000000ff" + "11".repeat(26), "W0RMT-M9", Contact.TYPE_COMPANION, 1_700_000_000))
+        val id = write("d:0000000000ff", "Yes")
+        sender.sendPending()
+        runWrites()
+        sender.onDirectRefused(100, CompanionClient.ERROR_NOT_FOUND)
+        sender.onDirectResult(100, DirectOutcome.REFUSED)
+        runWrites()
+        // The conversation is deleted while the contact goes back.
+        store.messages.remove(id)
+        store.statuses.remove(id)
+        sender.onContactSaved("0000000000ff" + "11".repeat(26), saved = true, errorCode = null)
+        runWrites()
+        assertEquals(listOf("d:0000000000ff Yes", "save W0RMT-M9 flags 1 path -1"), radio.sent)
+        assertTrue(!sender.busy())
+    }
+
+    @Test
     fun aContactTheRadioWillNotTakeBackFailsTheMessage() {
         store.kept.add(KeptContact("0000000000ff" + "11".repeat(26), "W0RMT-M9", Contact.TYPE_COMPANION, 1_700_000_000))
         val id = write("d:0000000000ff", "Yes")

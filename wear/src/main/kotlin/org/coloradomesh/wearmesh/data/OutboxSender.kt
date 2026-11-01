@@ -247,8 +247,24 @@ class OutboxSender(
     fun onContactSaved(publicKeyHex: String, saved: Boolean, errorCode: Int?) {
         val group = synchronized(lock) { awaitingSave.remove(publicKeyHex) } ?: return
         when {
-            // Off the link's thread, as every hand-over is.
-            saved -> writer.execute { group.forEach { handOver(it) } }
+            // Off the link's thread, as every hand-over is; only those still waiting (a deleted
+            // conversation takes its messages with it).
+            saved -> writer.execute {
+                val waiting = try {
+                    store.pendingOutgoing().map { it.id }.toSet()
+                } catch (e: Exception) {
+                    log("Outbox: could not read the messages to send (${e.message})")
+                    emptySet()
+                }
+                for (message in group) {
+                    if (message.id in waiting) {
+                        handOver(message)
+                    } else {
+                        synchronized(lock) { inFlight.remove(message.id) }
+                        runIfIdle()
+                    }
+                }
+            }
             errorCode != null -> for (message in group) {
                 end(message, OutgoingStatus.NO_CONTACT, "the radio would not take the contact back (error $errorCode)")
             }

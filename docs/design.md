@@ -129,7 +129,7 @@ The app has three screens and two glanceable surfaces, built for one-handed use 
 
 The radio is the source of truth for channels; the watch keeps only a small message history it has already pulled.
 
-- **Room database** with four tables: radio (address, name, self info, last sync), channel (index, name, mute, unread count), contact (key prefix, name, unread count), message (channel index or contact, sender, text, timestamp, SNR, direction, send status).
+- **Room database** with five tables (schema version 6): radios (address, sync state), channels (slot, name, kind), contacts (key, key prefix, name, type, last advert, when seen, favourite), messages (conversation, sender, text, sent and received times, read, direction, send status, SNR, hops), and kept_contacts (the key prefixes of people whose direct conversation was deleted, still counted as people you message).
 - **Retention:** keep the last N messages per channel (for example 200) and prune older ones; history once drained from the radio exists only on the watch.
 - **Channel secrets** are not needed on the watch to send or receive: the radio does the crypto. The app stores names and indexes only, never keys.
 - **Settings** (connection mode, interval, quick replies, vibration) in DataStore.

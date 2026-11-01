@@ -27,7 +27,7 @@ private const val LAST_MESSAGES =
  */
 private const val MESSAGED =
     "(EXISTS (SELECT 1 FROM messages m WHERE m.radio = c.radio AND m.conversation = 'd:' || c.prefix) " +
-        "OR EXISTS (SELECT 1 FROM kept_contacts k WHERE k.radio = c.radio AND k.public_key = c.public_key))"
+        "OR EXISTS (SELECT 1 FROM kept_contacts k WHERE k.radio = c.radio AND k.prefix = c.prefix))"
 
 @Dao
 interface StoreDao {
@@ -51,7 +51,7 @@ interface StoreDao {
     @Query(
         "DELETE FROM contacts WHERE radio = :radio AND seen_at < :readAt AND NOT EXISTS " +
             "(SELECT 1 FROM messages m WHERE m.radio = contacts.radio AND m.conversation = 'd:' || contacts.prefix) AND NOT EXISTS " +
-            "(SELECT 1 FROM kept_contacts k WHERE k.radio = contacts.radio AND k.public_key = contacts.public_key)",
+            "(SELECT 1 FROM kept_contacts k WHERE k.radio = contacts.radio AND k.prefix = contacts.prefix)",
     )
     fun dropContactsNotSeenSince(radio: String, readAt: Long)
 
@@ -203,9 +203,6 @@ interface StoreDao {
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     fun keepContact(row: KeptContactRow)
-
-    @Query("SELECT public_key FROM contacts WHERE radio = :radio AND prefix = :prefix")
-    fun keysWithPrefix(radio: String, prefix: String): List<String>
 
     /** The watch's messages in [conversation] that failed: their notifications go with it. */
     @Query("SELECT id FROM messages WHERE radio = :radio AND conversation = :conversation AND outgoing = 1 AND status IN ('FAILED', 'NO_CONTACT')")

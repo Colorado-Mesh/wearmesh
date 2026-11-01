@@ -46,9 +46,8 @@ class RoomMessageStore(private val db: WearMeshDatabase, override val address: S
     override fun deleteConversation(conversation: String): List<Long> = db.runInTransaction(
         Callable {
             val failed = dao.failedIn(address, conversation)
-            if (conversation.startsWith("d:")) {
-                for (key in dao.keysWithPrefix(address, conversation.removePrefix("d:"))) dao.keepContact(KeptContactRow(address, key))
-            }
+            // By prefix, so it counts even if the contact has not been read from the radio yet.
+            if (conversation.startsWith("d:")) dao.keepContact(KeptContactRow(address, conversation.removePrefix("d:").lowercase()))
             dao.deleteConversation(address, conversation)
             failed
         },

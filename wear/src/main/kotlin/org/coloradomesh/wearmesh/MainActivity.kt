@@ -235,6 +235,8 @@ class MainActivity : ComponentActivity() {
         Notifier.dismiss(app, radio, conversation)
         Storage.later {
             val failed = store.deleteConversation(conversation)
+            // Again once the messages are gone: a sync queued before this could have posted it anew.
+            Notifier.dismiss(app, radio, conversation)
             for (id in failed) Notifier.dismissFailure(app, radio, id)
             SpikeLog.log("Conversation $conversation deleted")
             Storage.refreshCounts(app)
