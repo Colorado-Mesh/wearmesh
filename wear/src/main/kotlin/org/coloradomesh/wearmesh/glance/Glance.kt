@@ -48,9 +48,13 @@ data class Glance(
          */
         fun shortName(name: String, open: Boolean): String {
             val bare = name.trim().removePrefix("#").trim().ifEmpty { name.trim() }
-            val characters = graphemes(bare).take(if (open) 3 else 4).joinToString("") { it.uppercase() }
+            // In capitals before counting: some letters grow ("ß" is "SS"), and the count is what shows.
+            val characters = graphemes(bare.uppercase()).take(if (open) 3 else 4).joinToString("")
             return if (open) "#$characters" else characters
         }
+
+        /** Whether a channel of this stored kind is one anyone can read: Public, or a hashtag channel. */
+        fun isOpen(kind: String): Boolean = kind == "PUBLIC" || kind == "HASHTAG"
 
         /**
          * [text] split into the characters a reader sees: a code point with the marks, variation
