@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 6,
-    "identityHash": "e6dd7c575878fda87193514c6b27e24b",
+    "identityHash": "644f888bb8ea640dddbab01ae6925d99",
     "entities": [
       {
         "tableName": "radios",
@@ -264,7 +264,7 @@
       },
       {
         "tableName": "kept_contacts",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`radio` TEXT NOT NULL, `public_key` TEXT NOT NULL, PRIMARY KEY(`radio`, `public_key`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`radio` TEXT NOT NULL, `prefix` TEXT NOT NULL, PRIMARY KEY(`radio`, `prefix`))",
         "fields": [
           {
             "fieldPath": "radio",
@@ -273,8 +273,8 @@
             "notNull": true
           },
           {
-            "fieldPath": "publicKey",
-            "columnName": "public_key",
+            "fieldPath": "prefix",
+            "columnName": "prefix",
             "affinity": "TEXT",
             "notNull": true
           }
@@ -283,7 +283,7 @@
           "autoGenerate": false,
           "columnNames": [
             "radio",
-            "public_key"
+            "prefix"
           ]
         },
         "indices": [],
@@ -293,7 +293,7 @@
     "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'e6dd7c575878fda87193514c6b27e24b')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '644f888bb8ea640dddbab01ae6925d99')"
     ]
   }
 }
