@@ -6,7 +6,7 @@ M0 answers the Bluetooth questions on a real watch before any messaging UI is bu
 - The packet size (MTU) the watch negotiates is recorded.
 - On-device dictation quality is checked.
 
-The spike reads from the radio only. It never sends on the mesh and never changes the radio's settings, channels, contacts or clock.
+The spike reads from the radio only. It never sends on the mesh and never changes the radio's settings, channels, contacts or clock. (The app that replaced it is not read-only: it sends any messages waiting in its outbox, sets the radio's clock when it is off, and, only with Settings › Keep contacts on radio turned on, saves contacts you message to the radio; see [keeping-contacts.md](keeping-contacts.md). To repeat the link test below, leave that setting off and the outbox empty.)
 
 M0 is done. The spike screen this procedure was written for has since been replaced by the app's screens (M2 step 3), and the dictation test was removed until M3. To repeat the Live link test now: add the radio under **Radios › Add a radio**, set **Settings › Mode** to **Live**, and read the log in **Settings › Diagnostics**.
 

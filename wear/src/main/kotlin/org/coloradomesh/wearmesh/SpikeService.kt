@@ -158,6 +158,13 @@ class SpikeService : Service() {
         Storage.later { store.open() }
         // This link's own session, never a later one's: the sender is called on the storage thread.
         val link = AtomicReference<RadioSession?>(null)
+        // Read when the link opens for its full read's plan, and again at each write, so turning
+        // the setting on or off takes effect at once for saves (favourites wait for a full read).
+        val keepContacts = Prefs.of(this).getBoolean(Prefs.KEEP_CONTACTS, false)
+        val prefs = Prefs.of(this)
+        fun keepingNow() = prefs.getBoolean(Prefs.KEEP_CONTACTS, false)
+        // This link's recorder, for the sender, which runs on the storage thread.
+        val recorderRef = AtomicReference<SyncRecorder?>(null)
         val sender = OutboxSender(
             store,
             Storage.writer,
@@ -167,6 +174,13 @@ class SpikeService : Service() {
                 }
 
                 override fun sendDirectText(publicKeyHex: String, text: String): Long? = link.get()?.sendDirectText(publicKeyHex, text)
+
+                // Only with Settings › Keep contacts on radio on: otherwise the watch never changes the radio's contacts.
+                override fun saveContact(contact: Contact): Boolean {
+                    if (!keepingNow()) return false
+                    recorderRef.get()?.saving(contact)
+                    return link.get()?.saveContact(contact) == true
+                }
             },
             { SpikeLog.log(it) },
             onFailed = { message, status, why -> Notifier.failed(this, target, message, status, why) },
@@ -190,6 +204,11 @@ class SpikeService : Service() {
             override fun onDirectResult(id: Long, publicKeyHex: String, text: String, outcome: DirectOutcome) =
                 sender.onDirectResult(id, outcome)
 
+            override fun onContactSaved(publicKeyHex: String, saved: Boolean, errorCode: Int?) {
+                sender.onContactSaved(publicKeyHex, saved, errorCode)
+                listener.onContactSaved(publicKeyHex, saved, errorCode)
+            }
+
             // A link that is up but never got through start-up would sit idle: close it, and the
             // reconnect after a drop tries again.
             override fun onStartUpFailed(what: String) {
@@ -206,14 +225,20 @@ class SpikeService : Service() {
             // Gathered and notified once the radio's queue is empty (see onQueueEmpty), so a burst
             // after reconnecting is one update, not one per message.
             onStored = { message -> toNotify.add(message) },
+            // The people you message, put back on the radio or made favourites there (ContactKeeper).
+            onKeep = { contacts -> if (keepingNow()) for (contact in contacts) link.get()?.saveContact(contact) },
+            keepContacts = keepContacts,
         )
         recorder = sync
+        recorderRef.set(sync)
         val opened = RadioSession(
             context = this,
             address = target,
             listener = sync,
             appName = APP_NAME,
             startUp = CompanionClient.StartUp(clockTolerance = RadioClock.TOLERANCE_SECONDS),
+            // A save already queued is dropped once the user turns Keep contacts on radio off.
+            savesAllowed = { keepingNow() },
             onLog = { SpikeLog.log("Link: $it") },
             onLinkReady = { size -> main.post { if (mine == generation) linkReady(size) } },
             onClosed = { reason -> main.post { if (mine == generation) linkClosed(reason) } },

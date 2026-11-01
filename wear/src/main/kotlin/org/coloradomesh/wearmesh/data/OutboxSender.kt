@@ -1,6 +1,7 @@
 package org.coloradomesh.wearmesh.data
 
 import org.coloradomesh.meshcore.protocol.CompanionClient
+import org.coloradomesh.meshcore.protocol.Contact
 import org.coloradomesh.meshcore.protocol.DirectOutcome
 import java.util.concurrent.Executor
 
@@ -12,7 +13,9 @@ import java.util.concurrent.Executor
  * ([Port]) once start-up is over. A channel message ends as [OutgoingStatus.SENT] when the radio
  * takes it; MeshCore reports nothing more for channel messages. A direct message is waited on for
  * its recipient's acknowledgement through every try the shared code makes, and ends as
- * [OutgoingStatus.DELIVERED] or [OutgoingStatus.UNCONFIRMED]. One the radio will not take ends as
+ * [OutgoingStatus.DELIVERED] or [OutgoingStatus.UNCONFIRMED]. One the radio refuses because it no
+ * longer lists the recipient is sent once more after the watch puts the contact back
+ * ([ContactKeeper.restored]), when it has the contact's key. One the radio will not take ends as
  * [OutgoingStatus.FAILED], as does one that waited longer than [STALE_MS] for a connection: news
  * that late could mislead.
  *
@@ -33,12 +36,15 @@ class OutboxSender(
     /** A message that ended failed (not merely unconfirmed), on [writer] once recorded; it notifies. */
     private val onFailed: (OutgoingMessage, OutgoingStatus, String?) -> Unit = { _, _, _ -> },
 ) {
-    /** What this needs of the connection: the shared code's two send calls. */
+    /** What this needs of the connection: the shared code's send calls, and saving a contact. */
     interface Port {
         fun sendChannelText(channelIndex: Int, text: String)
 
         /** Returns the id its outcome is reported under, or null when it cannot be queued now. */
         fun sendDirectText(publicKeyHex: String, text: String): Long?
+
+        /** Queues saving [contact] to the radio, ahead of anything sent after; false when it cannot. */
+        fun saveContact(contact: Contact): Boolean = false
     }
 
     private val lock = Any()
@@ -64,6 +70,15 @@ class OutboxSender(
 
     /** Refills queued on [writer] and not yet run: the sender is not idle while one waits. */
     private var refills = 0
+
+    /** Row ids of direct messages already sent again after putting their contact back: once only. */
+    private val restoredFor = HashSet<Long>()
+
+    /**
+     * Direct messages waiting for the radio to confirm their contact is back, by the contact's
+     * key: one save per contact, however many messages to it were refused.
+     */
+    private val awaitingSave = HashMap<String, MutableList<OutgoingMessage>>()
 
     /** The radio's error code for each refused direct message, by the shared code's id, until its result comes. */
     private val refusedWith = HashMap<Long, Int?>()
@@ -176,9 +191,71 @@ class OutboxSender(
             DirectOutcome.UNCONFIRMED -> end(message, OutgoingStatus.UNCONFIRMED, "no acknowledgement after every try")
             // Step 1 found the radio's contact list full and dropping contacts, people being messaged among them.
             DirectOutcome.REFUSED -> if (code == CompanionClient.ERROR_NOT_FOUND) {
-                end(message, OutgoingStatus.NO_CONTACT, "your radio does not have this contact (its list may be full)")
+                val again = synchronized(lock) { !finished && restoredFor.add(message.id) }
+                if (again) restoreAndResend(message) else end(message, OutgoingStatus.NO_CONTACT, NO_CONTACT_WHY)
             } else {
                 end(message, OutgoingStatus.FAILED, "the radio would not send it" + (code?.let { " (error $it)" } ?: ", or did not answer"))
+            }
+        }
+    }
+
+    /**
+     * The radio no longer lists [message]'s recipient. Looks the contact up in the store, off the
+     * link's thread; if the watch has it, saves it back to the radio, and sends [message] again
+     * once the radio confirms the save ([onContactSaved]). The message stays in flight meanwhile.
+     */
+    private fun restoreAndResend(message: OutgoingMessage) = writer.execute {
+        val prefix = message.conversation.removePrefix("d:")
+        val kept = try {
+            store.directContact(prefix)
+        } catch (e: Exception) {
+            log("Outbox: could not read the contact for $prefix (${e.message})")
+            null
+        }
+        if (kept == null) {
+            end(message, OutgoingStatus.NO_CONTACT, NO_CONTACT_WHY)
+            return@execute
+        }
+        // A save for this contact already under way takes this message too.
+        val first = synchronized(lock) {
+            val group = awaitingSave[kept.publicKey]
+            if (group != null) group.add(message) else awaitingSave[kept.publicKey] = mutableListOf(message)
+            group == null
+        }
+        if (!first) return@execute
+        if (radio.saveContact(ContactKeeper.restored(kept))) {
+            log("Outbox: the radio no longer listed ${kept.name}; putting them back, as a favourite, to send again")
+            return@execute
+        }
+        val group = synchronized(lock) { awaitingSave.remove(kept.publicKey).orEmpty() }
+        if (synchronized(lock) { finished }) {
+            // The link closed before the contact could go back: the next connection tries again.
+            synchronized(lock) { group.forEach { inFlight.remove(it.id) } }
+            log("Outbox: the connection ended before ${kept.name} could be put back; the message waits for the next")
+            runIfIdle()
+        } else {
+            for (waiting in group) end(waiting, OutgoingStatus.NO_CONTACT, NO_CONTACT_WHY)
+        }
+    }
+
+    /**
+     * From the protocol client: how a contact save ended. One this sender asked for, to put back a
+     * refused recipient, sends that message again once [saved]. Refused by the radio, the message
+     * fails for want of the contact; not answered (the link closed, or saves were turned off), it
+     * stays waiting for the next connection.
+     */
+    fun onContactSaved(publicKeyHex: String, saved: Boolean, errorCode: Int?) {
+        val group = synchronized(lock) { awaitingSave.remove(publicKeyHex) } ?: return
+        when {
+            // Off the link's thread, as every hand-over is.
+            saved -> writer.execute { group.forEach { handOver(it) } }
+            errorCode != null -> for (message in group) {
+                end(message, OutgoingStatus.NO_CONTACT, "the radio would not take the contact back (error $errorCode)")
+            }
+            else -> {
+                synchronized(lock) { group.forEach { inFlight.remove(it.id) } }
+                log("Outbox: the contact for a direct message was not put back; the message waits for the next connection")
+                runIfIdle()
             }
         }
     }
@@ -194,6 +271,8 @@ class OutboxSender(
             finished = true
             unconfirmed = directsWaiting.values.toList()
             directsWaiting.clear()
+            // Messages whose contact was still going back were never sent again: they stay waiting.
+            awaitingSave.clear()
             channelsWaiting.clear()
             inFlight.clear()
             more = false
@@ -271,5 +350,7 @@ class OutboxSender(
 
         /** Below the shared code's limit of 5 queued, so it never refuses one for being full. */
         const val MAX_IN_FLIGHT = 4
+
+        private const val NO_CONTACT_WHY = "your radio does not have this contact (its list may be full)"
     }
 }

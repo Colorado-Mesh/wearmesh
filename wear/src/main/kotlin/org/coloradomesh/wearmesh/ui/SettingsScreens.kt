@@ -21,6 +21,7 @@ data class SettingsState(
     val hasRadio: Boolean,
     val syncing: Boolean,
     val notificationsAllowed: Boolean,
+    val keepContacts: Boolean = false,
 )
 
 @Composable
@@ -31,6 +32,7 @@ fun SettingsScreen(
     onAllowAlarms: () -> Unit,
     onNotifications: () -> Unit,
     onComplication: () -> Unit,
+    onKeepContacts: () -> Unit,
     onQuickReplies: () -> Unit,
     onAllowNotifications: () -> Unit,
     onReadEverything: () -> Unit,
@@ -61,6 +63,18 @@ fun SettingsScreen(
             item { WideChip("Notifications", detail = "On or off for each conversation", secondary = true) { onNotifications() } }
             item { WideChip("Quick replies", detail = "Change, add or remove", secondary = true) { onQuickReplies() } }
             item { WideChip("Complication", detail = "What its count counts", secondary = true) { onComplication() } }
+            item {
+                WideChip(
+                    "Keep contacts on radio",
+                    detail = if (state.keepContacts) {
+                        "On: people you message are made favourites, and put back if dropped"
+                    } else {
+                        "Off. Changes the radio's contacts: tap to turn on"
+                    },
+                    secondary = !state.keepContacts,
+                    detailLines = 2,
+                ) { onKeepContacts() }
+            }
         }
         if (!state.notificationsAllowed) {
             item { WideChip("Allow notifications", detail = "They are off for WearMesh", detailLines = 2) { onAllowNotifications() } }

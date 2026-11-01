@@ -286,6 +286,29 @@ class RoomMessageStoreTest {
         )
         assertFalse(store.hasContact("aaaaaaaaaaaa"))
         assertTrue(store.favouriteNames().isEmpty())
+        // Bo, whom the watch has messaged, is kept, so the watch can put him back on the radio,
+        // but not taken for a contact the radio lists.
+        assertFalse(store.hasContact("bbbbbbbbbbbb"))
+        assertEquals(listOf(KeptContact("b".repeat(64), "Bo", Contact.TYPE_COMPANION, 1_700_000_000)), store.directContacts())
+        assertEquals("Bo", store.directContact("BBBBBBBBBBBB")?.name)
+        assertNull(store.directContact("cccccccccccc"))
+    }
+
+    @Test
+    fun aKeptContactTheRadioDroppedIsNoLongerAFavourite() {
+        store.saveContacts(listOf(contact('b', "Bo").copy(flags = Contact.FLAG_FAVOURITE)), readAt = 1_800_000_000_000)
+        store.addMessage(message("hi", conversation = "d:bbbbbbbbbbbb", sender = ""))
+        assertEquals(listOf("Bo"), store.favouriteNames())
+        // The next full read does not list Bo: kept for his conversation, but not on the radio.
+        store.dropContactsNotSeenSince(1_800_003_600_000)
+        assertFalse(store.hasContact("bbbbbbbbbbbb"))
+        assertTrue(store.favouriteNames().isEmpty())
+        assertEquals("Bo", store.directContact("bbbbbbbbbbbb")?.name)
+        assertNull(runBlocking { db.dao().contactFlow(address, "bbbbbbbbbbbb").first() })
+        // Back on the radio (an advert, or the watch putting him back): listed again.
+        store.saveContacts(listOf(contact('b', "Bo").copy(flags = Contact.FLAG_FAVOURITE)), readAt = 1_800_003_700_000)
+        assertTrue(store.hasContact("bbbbbbbbbbbb"))
+        assertEquals(listOf("Bo"), store.favouriteNames())
     }
 
     @Test

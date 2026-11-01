@@ -18,6 +18,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.coloradomesh.meshcore.ble.RadioSession
 import org.coloradomesh.meshcore.protocol.CompanionClient
+import org.coloradomesh.meshcore.protocol.Contact
 import org.coloradomesh.meshcore.protocol.DirectOutcome
 import org.coloradomesh.meshcore.protocol.SelfInfo
 import org.coloradomesh.wearmesh.data.Delays
@@ -73,6 +74,9 @@ object CheckInRun {
     const val SEND_LIMIT_MS = 200_000L
     private const val CLOSE_WAIT_MS = 5_000L
 
+    /** How long a full read waits for the radio to answer the contacts it saves; each takes well under a second. */
+    private const val KEEP_WAIT_MS = 15_000L
+
     /** Night 2 of step 1 saw one check-in need all 3 tries after Bluetooth status 133. */
     private const val CONNECT_TRIES = 4
 
@@ -106,7 +110,7 @@ object CheckInRun {
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "WearMesh:check-in")
             .apply {
                 setReferenceCounted(false)
-                acquire(timeLimitMs + sendLimitMs + CLOSE_WAIT_MS + 2 * STORE_WAIT_MS + WAKE_MARGIN_MS)
+                acquire(timeLimitMs + sendLimitMs + KEEP_WAIT_MS + CLOSE_WAIT_MS + 2 * STORE_WAIT_MS + WAKE_MARGIN_MS)
             }
         try {
             checkIn(app, why, timeLimitMs, fullRead, sendLimitMs)
@@ -159,6 +163,11 @@ object CheckInRun {
         // The first sync after choosing a radio brings its backlog, which does not notify (decided
         // for step 4); once that sync has collected the queue, later messages do.
         val prefs = Prefs.of(app)
+        // Settings › Keep contacts on radio: the only time the watch changes the radio's contacts.
+        // Read when the run starts for its full read's plan, and again at each write, so turning
+        // the setting on or off takes effect at once for saves.
+        val keepContacts = prefs.getBoolean(Prefs.KEEP_CONTACTS, false)
+        fun keepingNow() = prefs.getBoolean(Prefs.KEEP_CONTACTS, false)
         val backlog = prefs.getString(Prefs.QUIET_SYNC_RADIO, null) == address
         // A channel message waiting to send names only its slot, so a connection that sends one
         // reads the channel list first: a slot given another channel meanwhile loses its waiting
@@ -185,6 +194,8 @@ object CheckInRun {
 
         // The outbox goes over this connection once the queue is collected.
         val link = AtomicReference<RadioSession?>(null)
+        // Made after the sender, which reaches it through this.
+        val recorderRef = AtomicReference<SyncRecorder?>(null)
         val sender = OutboxSender(
             store,
             Storage.writer,
@@ -194,11 +205,28 @@ object CheckInRun {
                 }
 
                 override fun sendDirectText(publicKeyHex: String, text: String): Long? = link.get()?.sendDirectText(publicKeyHex, text)
+
+                // Only with Settings › Keep contacts on radio on: otherwise the watch never changes the radio's contacts.
+                override fun saveContact(contact: Contact): Boolean {
+                    if (!keepingNow()) return false
+                    recorderRef.get()?.saving(contact)
+                    return link.get()?.saveContact(contact) == true
+                }
             },
             { SpikeLog.log("Check-in: $it") },
             onFailed = { message, status, why -> Notifier.failed(app, address, message, status, why) },
         )
         val sendsDone = CompletableDeferred<Unit>()
+
+        // A full read saves the people you message back to the radio (ContactKeeper); the
+        // check-in waits for the radio's answers before disconnecting, or they could be cut off.
+        val keptDone = CompletableDeferred<Unit>()
+        val keepLock = Any()
+        val keepWaiting = HashSet<String>()
+        var keepPlanned = false
+        fun keepCheck() {
+            if (keepPlanned && keepWaiting.isEmpty()) keptDone.complete(Unit)
+        }
 
         // Called on the link's threads with the protocol client locked: nothing here may block.
         val listener = object : CompanionClient.Listener {
@@ -215,6 +243,14 @@ object CheckInRun {
                 if (outcome.isCompleted) return
                 if (sendLimitMs > 0) sender.sendPending { sendsDone.complete(Unit) } else sendsDone.complete(Unit)
                 outcome.complete(Outcome.Drained)
+            }
+
+            override fun onContactSaved(publicKeyHex: String, saved: Boolean, errorCode: Int?) {
+                sender.onContactSaved(publicKeyHex, saved, errorCode)
+                synchronized(keepLock) {
+                    keepWaiting.remove(publicKeyHex)
+                    keepCheck()
+                }
             }
 
             // Ends the check-in at once, rather than at the time limit with the radio held all along.
@@ -239,7 +275,19 @@ object CheckInRun {
             log = { SpikeLog.log("Check-in: $it") },
             also = listener,
             onStored = { newlyStored.add(it) },
+            onKeep = { contacts ->
+                synchronized(keepLock) { keepWaiting.addAll(contacts.map { it.publicKeyHex }) }
+                for (contact in contacts) {
+                    if (!keepingNow() || link.get()?.saveContact(contact) != true) synchronized(keepLock) { keepWaiting.remove(contact.publicKeyHex) }
+                }
+                synchronized(keepLock) {
+                    keepPlanned = true
+                    keepCheck()
+                }
+            },
+            keepContacts = keepContacts,
         )
+        recorderRef.set(recorder)
         val session = RadioSession(
             context = app,
             address = address,
@@ -252,6 +300,8 @@ object CheckInRun {
                 readChannels = plan.startUp.readChannels || channelsWaiting,
                 clockTolerance = RadioClock.TOLERANCE_SECONDS,
             ),
+            // A save already queued is dropped once the user turns Keep contacts on radio off.
+            savesAllowed = { keepingNow() },
             onClosed = { reason ->
                 closed.complete(reason)
                 outcome.complete(Outcome.Ended(reason))
@@ -267,6 +317,11 @@ object CheckInRun {
             if (collected == Outcome.Drained && sendLimitMs > 0) {
                 if (withTimeoutOrNull(sendLimitMs) { sendsDone.await() } == null) {
                     SpikeLog.log("Check-in: messages still sending after ${sendLimitMs / 1000} s; disconnecting")
+                }
+            }
+            if (collected == Outcome.Drained && plan.fullRead) {
+                if (withTimeoutOrNull(KEEP_WAIT_MS) { keptDone.await() } == null) {
+                    SpikeLog.log("Check-in: contacts still being saved to the radio after ${KEEP_WAIT_MS / 1000} s; disconnecting")
                 }
             }
             collected

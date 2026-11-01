@@ -41,8 +41,11 @@ reviews:
         the Pixel Watch 5. Design rules, from docs/design.md; flag any change that breaks one:
         - The watch is the radio's only client while connected; no multi-client handling.
         - Never write to the radio's configuration: no channels, contacts, settings, advertised
-          position, paths or keys. Sending text is allowed. Setting the radio's clock is planned
-          (design.md) and needs to be deliberate, not a side effect.
+          position, paths or keys. Sending text is allowed. Two writes are allowed, each
+          deliberate, not a side effect: setting the radio's clock when it is more than a minute
+          off, and saving contacts the user messages (made favourites, or put back when the radio
+          drops them), only while Settings > Keep contacts on radio is on, which is off by default
+          (docs/keeping-contacts.md). Flag any contact write that does not check that setting.
         - One Bluetooth operation at a time, and every operation has a time limit.
         - Use every channel the radio reports, not a fixed number of slots.
         - Channel secrets never leave the radio frames they arrive in; the watch stores names

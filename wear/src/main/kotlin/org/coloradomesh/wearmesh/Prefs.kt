@@ -49,6 +49,13 @@ object Prefs {
     /** The channel the complication counts, such as "c:3"; the key is this plus the radio's address. Unset: all notifying conversations. */
     const val COMPLICATION_CHANNEL = "complication_channel_"
 
+    /**
+     * Settings › Keep contacts on radio (decided 1 November 2026, off by default): after each full
+     * read, the people you message are made favourites on the radio, and any it dropped are put
+     * back. The only time WearMesh changes the radio's contact list.
+     */
+    const val KEEP_CONTACTS = "keep_contacts"
+
     fun of(context: Context): SharedPreferences =
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 }

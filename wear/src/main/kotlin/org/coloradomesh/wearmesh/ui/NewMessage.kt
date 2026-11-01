@@ -52,9 +52,9 @@ object NewMessage {
      */
     fun favouriteWarning(conversation: String, contact: ContactRow?): String? = when {
         !conversation.startsWith("d:") -> null
-        contact == null -> "Your radio no longer lists this contact, so messages cannot go either way. An advert from them brings it back."
+        contact == null -> "Your radio no longer lists this contact, so messages cannot go either way. An advert from them brings it back, or Settings › Keep contacts on radio."
         contact.favourite -> null
-        else -> "Not a favourite on your radio, which may drop this contact when its list is full. Mark it a favourite in the phone app."
+        else -> "Not a favourite on your radio, which may drop this contact when its list is full. Mark it a favourite in the phone app, or turn on Settings › Keep contacts on radio."
     }
 }
 

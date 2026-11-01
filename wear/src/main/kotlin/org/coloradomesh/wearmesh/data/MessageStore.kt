@@ -55,6 +55,11 @@ enum class OutgoingStatus {
 /** A contact the radio stopped listing, for the log. */
 data class DroppedContact(val name: String, val prefix: String, val favourite: Boolean)
 
+/** A contact the watch keeps for the radio: one with a direct-message conversation (decided 1 November 2026). */
+data class KeptContact(val publicKey: String, val name: String, val type: Int, val lastAdvert: Long) {
+    val prefix: String get() = publicKey.take(12)
+}
+
 /** A message this watch has still to send. */
 data class OutgoingMessage(
     val id: Long,
@@ -93,9 +98,17 @@ interface MessageStore {
 
     /**
      * After a full contact list read at [readAt]: drops contacts the radio no longer has, and
-     * returns those of them that are favourites or have a direct-message conversation.
+     * returns those of them that are favourites or have a direct-message conversation. One with a
+     * direct-message conversation is kept, so the watch can put it back on the radio
+     * ([ContactKeeper]).
      */
     fun dropContactsNotSeenSince(readAt: Long): List<DroppedContact>
+
+    /** Every stored contact with a direct-message conversation. */
+    fun directContacts(): List<KeptContact> = emptyList()
+
+    /** The stored contact for the direct-message conversation with [prefix], if the watch has it. */
+    fun directContact(prefix: String): KeptContact? = null
 
     /** The names of the contacts marked as favourites on the radio, as last read. */
     fun favouriteNames(): List<String>

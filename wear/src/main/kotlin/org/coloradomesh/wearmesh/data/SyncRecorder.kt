@@ -5,6 +5,7 @@ import org.coloradomesh.meshcore.protocol.ChannelMessage
 import org.coloradomesh.meshcore.protocol.CompanionClient
 import org.coloradomesh.meshcore.protocol.Contact
 import org.coloradomesh.meshcore.protocol.DirectMessage
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executor
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -19,7 +20,8 @@ import java.util.concurrent.atomic.AtomicInteger
  * after the read, or a read the radio never finished.
  *
  * On a full read ([plan]), contacts the radio no longer has are dropped after the contact list
- * read, and the read is recorded as complete only once that and an answer for every channel slot
+ * read (except those with a direct-message conversation, which [ContactKeeper] has [onKeep] save
+ * back to the radio, as favourites, along with any such contact not yet a favourite), and the read is recorded as complete only once that and an answer for every channel slot
  * have both come; otherwise the next sync reads everything again. A message the store already has
  * is counted in [duplicates] and logged, not stored again.
  *
@@ -35,7 +37,23 @@ class SyncRecorder(
     private val also: CompanionClient.Listener = object : CompanionClient.Listener {},
     /** Each message newly stored, on the storage thread, right after it is written; for notifications. */
     private val onStored: (IncomingMessage) -> Unit = {},
+    /**
+     * After a full read's contact list is stored, on the storage thread: the contacts to save to
+     * the radio (possibly none). Called once per full read; the caller hands each to the radio.
+     */
+    private val onKeep: (List<Contact>) -> Unit = {},
+    /**
+     * Whether the user has turned on Settings › Keep contacts on radio. Off, [onKeep] is given
+     * nothing, and the log says when someone you message is missing from the radio.
+     */
+    private val keepContacts: Boolean = false,
 ) : CompanionClient.Listener by also {
+    /** Names of the contacts handed to [onKeep] and not yet answered for, by key, for the log. */
+    private val keeping = ConcurrentHashMap<String, Contact>()
+
+    /** Set on the storage thread once a full read's contact sweep is stored; markFullRead waits on it. */
+    @Volatile
+    private var sweepStored = false
     /** Every contact this connection reads is marked with this time, and a full read with it. */
     private val readAt = clock()
     private val contacts = ArrayList<Contact>()
@@ -73,6 +91,20 @@ class SyncRecorder(
                 for (gone in store.dropContactsNotSeenSince(readAt)) log(Favourites.dropped(gone))
                 // A node heard advertising during the read can come twice; the store keeps one of each.
                 log(Favourites.summary(batch.distinctBy { it.publicKeyHex }.size, store.favouriteNames()))
+                val keep = ContactKeeper.plan(batch, store.directContacts())
+                if (keepContacts) {
+                    for (contact in keep.restore) log("Contacts: putting ${contact.name} (${contact.publicKeyHex.take(12)}) back on the radio, as a favourite")
+                    for (contact in keep.favourite) log("Contacts: making ${contact.name} (${contact.publicKeyHex.take(12)}) a favourite on the radio, as someone you message")
+                    for (contact in keep.all) keeping[contact.publicKeyHex] = contact
+                    onKeep(keep.all)
+                } else {
+                    if (keep.restore.isNotEmpty()) {
+                        val who = keep.restore.joinToString { it.name }
+                        log("Contacts: not on the radio, though you message them: $who. Settings › Keep contacts on radio would put them back")
+                    }
+                    onKeep(emptyList())
+                }
+                sweepStored = true
             }
             store.setContactsSince(lastModified)
         }
@@ -81,6 +113,26 @@ class SyncRecorder(
             markFullReadIfComplete()
         }
         also.onContactsRead(lastModified)
+    }
+
+    /**
+     * A save of [contact] handed to the radio from elsewhere (the outbox putting back a refused
+     * recipient), so that when the radio confirms it the store shows it as a favourite too.
+     */
+    fun saving(contact: Contact) {
+        keeping[contact.publicKeyHex] = contact
+    }
+
+    override fun onContactSaved(publicKeyHex: String, saved: Boolean, errorCode: Int?) {
+        val contact = keeping.remove(publicKeyHex)
+        val name = contact?.name ?: publicKeyHex.take(12)
+        // On the radio now, as a favourite: the store shows it so at once, not at the next read.
+        if (saved && contact != null && !finished) write { store.saveContacts(listOf(contact), readAt) }
+        if (!saved) {
+            val why = errorCode?.let { "error $it" } ?: "no answer"
+            log("Contacts: the radio did not take $name ($why); if its list is full, set it to overwrite the oldest, or to add only chat users")
+        }
+        also.onContactSaved(publicKeyHex, saved, errorCode)
     }
 
     override fun onChannelSlotsUnanswered(slots: Set<Int>) {
@@ -126,8 +178,11 @@ class SyncRecorder(
     private fun markFullReadIfComplete() {
         if (!plan.fullRead || fullReadMarked || !contactsSwept || !channelsComplete) return
         fullReadMarked = true
-        // Queued after the contact and channel writes, so it is recorded only once they are.
-        write { store.markFullRead(readAt) }
+        // Queued after the contact and channel writes, so it is recorded only once they are, and
+        // not when the contact sweep failed: the next check-in then reads everything again.
+        write {
+            if (sweepStored) store.markFullRead(readAt) else log("Full read not recorded: its contact list was not stored")
+        }
     }
 
     /** True, with a log line, when [what] came after [finish] and will not be stored. */
