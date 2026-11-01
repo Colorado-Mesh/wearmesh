@@ -244,9 +244,12 @@ object CheckInRun {
                 outcome.complete(Outcome.Drained)
             }
 
-            override fun onContactSaved(publicKeyHex: String, saved: Boolean, errorCode: Int?) = synchronized(keepLock) {
-                keepWaiting.remove(publicKeyHex)
-                keepCheck()
+            override fun onContactSaved(publicKeyHex: String, saved: Boolean, errorCode: Int?) {
+                sender.onContactSaved(publicKeyHex, saved, errorCode)
+                synchronized(keepLock) {
+                    keepWaiting.remove(publicKeyHex)
+                    keepCheck()
+                }
             }
 
             // Ends the check-in at once, rather than at the time limit with the radio held all along.
@@ -296,6 +299,8 @@ object CheckInRun {
                 readChannels = plan.startUp.readChannels || channelsWaiting,
                 clockTolerance = RadioClock.TOLERANCE_SECONDS,
             ),
+            // A save already queued is dropped once the user turns Keep contacts on radio off.
+            savesAllowed = { keepingNow() },
             onClosed = { reason ->
                 closed.complete(reason)
                 outcome.complete(Outcome.Ended(reason))

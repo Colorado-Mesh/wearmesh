@@ -153,7 +153,10 @@ class OutboxSenderTest {
         sender.onDirectRefused(100, CompanionClient.ERROR_NOT_FOUND)
         sender.onDirectResult(100, DirectOutcome.REFUSED)
         runWrites()
-        // Saved back as a favourite with no known route, then sent again: the radio takes them in that order.
+        // Saved back as a favourite with no known route; sent again only once the radio confirms it.
+        assertEquals(listOf("d:0000000000ff Yes", "save W0RMT-M9 flags 1 path -1"), radio.sent)
+        sender.onContactSaved("0000000000ff" + "11".repeat(26), saved = true, errorCode = null)
+        runWrites()
         assertEquals(listOf("d:0000000000ff Yes", "save W0RMT-M9 flags 1 path -1", "d:0000000000ff Yes"), radio.sent)
         assertEquals(OutgoingStatus.SENDING, store.statuses[id])
         sender.onDirectResult(101, DirectOutcome.DELIVERED)
@@ -178,6 +181,37 @@ class OutboxSenderTest {
     }
 
     @Test
+    fun aContactSaveThatIsNotAnsweredLeavesTheMessageWaiting() {
+        store.kept.add(KeptContact("0000000000ff" + "11".repeat(26), "W0RMT-M9", Contact.TYPE_COMPANION, 1_700_000_000))
+        val id = write("d:0000000000ff", "Yes")
+        sender.sendPending()
+        runWrites()
+        sender.onDirectRefused(100, CompanionClient.ERROR_NOT_FOUND)
+        sender.onDirectResult(100, DirectOutcome.REFUSED)
+        runWrites()
+        // The link closes with the save still queued.
+        sender.onContactSaved("0000000000ff" + "11".repeat(26), saved = false, errorCode = null)
+        sender.finish()
+        runWrites()
+        assertEquals(OutgoingStatus.SENDING, store.statuses[id])
+        assertEquals(2, radio.sent.size)
+    }
+
+    @Test
+    fun aContactTheRadioWillNotTakeBackFailsTheMessage() {
+        store.kept.add(KeptContact("0000000000ff" + "11".repeat(26), "W0RMT-M9", Contact.TYPE_COMPANION, 1_700_000_000))
+        val id = write("d:0000000000ff", "Yes")
+        sender.sendPending()
+        runWrites()
+        sender.onDirectRefused(100, CompanionClient.ERROR_NOT_FOUND)
+        sender.onDirectResult(100, DirectOutcome.REFUSED)
+        runWrites()
+        sender.onContactSaved("0000000000ff" + "11".repeat(26), saved = false, errorCode = 3)
+        runWrites()
+        assertEquals(OutgoingStatus.NO_CONTACT, store.statuses[id])
+    }
+
+    @Test
     fun aSecondRefusalAfterPuttingTheContactBackFails() {
         store.kept.add(KeptContact("0000000000ff" + "11".repeat(26), "W0RMT-M9", Contact.TYPE_COMPANION, 1_700_000_000))
         val id = write("d:0000000000ff", "Yes")
@@ -185,6 +219,8 @@ class OutboxSenderTest {
         runWrites()
         sender.onDirectRefused(100, CompanionClient.ERROR_NOT_FOUND)
         sender.onDirectResult(100, DirectOutcome.REFUSED)
+        runWrites()
+        sender.onContactSaved("0000000000ff" + "11".repeat(26), saved = true, errorCode = null)
         runWrites()
         sender.onDirectRefused(101, CompanionClient.ERROR_NOT_FOUND)
         sender.onDirectResult(101, DirectOutcome.REFUSED)

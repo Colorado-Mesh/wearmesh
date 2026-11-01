@@ -202,6 +202,11 @@ class SpikeService : Service() {
             override fun onDirectResult(id: Long, publicKeyHex: String, text: String, outcome: DirectOutcome) =
                 sender.onDirectResult(id, outcome)
 
+            override fun onContactSaved(publicKeyHex: String, saved: Boolean, errorCode: Int?) {
+                sender.onContactSaved(publicKeyHex, saved, errorCode)
+                listener.onContactSaved(publicKeyHex, saved, errorCode)
+            }
+
             // A link that is up but never got through start-up would sit idle: close it, and the
             // reconnect after a drop tries again.
             override fun onStartUpFailed(what: String) {
@@ -229,6 +234,8 @@ class SpikeService : Service() {
             listener = sync,
             appName = APP_NAME,
             startUp = CompanionClient.StartUp(clockTolerance = RadioClock.TOLERANCE_SECONDS),
+            // A save already queued is dropped once the user turns Keep contacts on radio off.
+            savesAllowed = { keepingNow() },
             onLog = { SpikeLog.log("Link: $it") },
             onLinkReady = { size -> main.post { if (mine == generation) linkReady(size) } },
             onClosed = { reason -> main.post { if (mine == generation) linkClosed(reason) } },
