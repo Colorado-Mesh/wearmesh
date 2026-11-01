@@ -294,6 +294,17 @@ class RoomMessageStoreTest {
     }
 
     @Test
+    fun aKeptContactTheRadioDroppedIsNoLongerAFavourite() {
+        store.saveContacts(listOf(contact('b', "Bo").copy(flags = Contact.FLAG_FAVOURITE)), readAt = 1_800_000_000_000)
+        store.addMessage(message("hi", conversation = "d:bbbbbbbbbbbb", sender = ""))
+        assertEquals(listOf("Bo"), store.favouriteNames())
+        // The next full read does not list Bo: kept for his conversation, but not a favourite.
+        store.dropContactsNotSeenSince(1_800_003_600_000)
+        assertTrue(store.hasContact("bbbbbbbbbbbb"))
+        assertTrue(store.favouriteNames().isEmpty())
+    }
+
+    @Test
     fun newMessageListsFavouriteCompanionsThenTheMostRecentlyHeard() = runBlocking {
         store.saveContacts(
             listOf(

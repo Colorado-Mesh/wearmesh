@@ -680,7 +680,7 @@ class MainActivity : ComponentActivity() {
                     onKeepContacts = {
                         keepContacts = !keepContacts
                         Prefs.of(this@MainActivity).edit().putBoolean(Prefs.KEEP_CONTACTS, keepContacts).apply()
-                        SpikeLog.log("Settings: keep contacts on radio ${if (keepContacts) "on; from the next full read" else "off"}")
+                        SpikeLog.log("Settings: keep contacts on radio ${if (keepContacts) "on; favourites and put-backs from the next full read, refused direct messages from the next connection" else "off; nothing more is saved"}")
                     },
                     onQuickReplies = { nav.navigate(QUICK_REPLIES) },
                     onAllowNotifications = { openNotificationSettings() },

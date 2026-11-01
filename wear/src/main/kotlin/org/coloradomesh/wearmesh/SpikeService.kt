@@ -158,8 +158,11 @@ class SpikeService : Service() {
         Storage.later { store.open() }
         // This link's own session, never a later one's: the sender is called on the storage thread.
         val link = AtomicReference<RadioSession?>(null)
-        // Read once per link: turning the setting on or off takes effect at the next connection.
+        // On when the link opened and still on at each write: turning it on takes effect at the
+        // next connection, turning it off at once.
         val keepContacts = Prefs.of(this).getBoolean(Prefs.KEEP_CONTACTS, false)
+        val prefs = Prefs.of(this)
+        fun keepingNow() = keepContacts && prefs.getBoolean(Prefs.KEEP_CONTACTS, false)
         val sender = OutboxSender(
             store,
             Storage.writer,
@@ -171,7 +174,7 @@ class SpikeService : Service() {
                 override fun sendDirectText(publicKeyHex: String, text: String): Long? = link.get()?.sendDirectText(publicKeyHex, text)
 
                 // Only with Settings › Keep contacts on radio on: otherwise the watch never changes the radio's contacts.
-                override fun saveContact(contact: Contact): Boolean = keepContacts && link.get()?.saveContact(contact) == true
+                override fun saveContact(contact: Contact): Boolean = keepingNow() && link.get()?.saveContact(contact) == true
             },
             { SpikeLog.log(it) },
             onFailed = { message, status, why -> Notifier.failed(this, target, message, status, why) },
@@ -212,7 +215,7 @@ class SpikeService : Service() {
             // after reconnecting is one update, not one per message.
             onStored = { message -> toNotify.add(message) },
             // The people you message, put back on the radio or made favourites there (ContactKeeper).
-            onKeep = { contacts -> for (contact in contacts) link.get()?.saveContact(contact) },
+            onKeep = { contacts -> if (keepingNow()) for (contact in contacts) link.get()?.saveContact(contact) },
             keepContacts = keepContacts,
         )
         recorder = sync

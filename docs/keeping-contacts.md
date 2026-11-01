@@ -8,7 +8,7 @@ A MeshCore companion radio adds every node it hears an advert from, until its co
 
 ## Opt-in: Settings › Keep contacts on radio
 
-This is the only time WearMesh changes anything on the radio besides its clock, so it is **off by default** (decided 1 November 2026, after review of meshcore-kotlin PR 8, whose rules forbid writing to the radio unless the user asks). Turn it on in Settings › **Keep contacts on radio**. It takes effect at the next full read.
+This is the only time WearMesh changes anything on the radio besides its clock, so it is **off by default** (decided 1 November 2026, after review of meshcore-kotlin PR 8, whose rules forbid writing to the radio unless the user asks). Turn it on in Settings › **Keep contacts on radio**. Favourites and putting back dropped contacts start at the next full read; a refused direct message has its contact put back from the next connection or check-in that sends it, even before a full read. Turned off, it stops at once: nothing more is saved, also on a Live link already open.
 
 With it off, the watch changes nothing, and after a full read the log names anyone you message who is missing from the radio:
 

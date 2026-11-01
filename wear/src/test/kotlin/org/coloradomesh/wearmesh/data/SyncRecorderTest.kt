@@ -54,7 +54,11 @@ class SyncRecorderTest {
         override fun retryOutgoing(id: Long, at: Long) = false
         override fun hasContact(prefix: String) = false
         var direct = emptyList<KeptContact>()
-        override fun directContacts() = direct
+        var failDirect = false
+        override fun directContacts(): List<KeptContact> {
+            if (failDirect) throw IllegalStateException("disk full")
+            return direct
+        }
     }
 
     private val store = FakeStore()
@@ -106,6 +110,30 @@ class SyncRecorderTest {
         assertTrue(log.contains("Contacts: making Ann (aaaaaaaaaaaa) a favourite on the radio, as someone you message"))
         recorder.onContactSaved("cc".repeat(32), saved = false, errorCode = 3)
         assertTrue(log.last().startsWith("Contacts: the radio did not take Cy (error 3)"))
+    }
+
+    @Test
+    fun aSavedContactIsStoredAsAFavouriteAtOnce() {
+        store.direct = listOf(KeptContact("aa".repeat(32), "Ann", Contact.TYPE_COMPANION, 0))
+        val recorder = recorder(full = true)
+        recorder.onContact(Contact("aa".repeat(32), Contact.TYPE_COMPANION, "Ann", 0, 0.0, 0.0))
+        recorder.onContactsRead(1_700_000_600)
+        runWrites()
+        store.calls.clear()
+        recorder.onContactSaved("aa".repeat(32), saved = true, errorCode = null)
+        runWrites()
+        assertEquals(listOf("saveContacts [Ann] at $now"), store.calls)
+    }
+
+    @Test
+    fun aFullReadWhoseSweepFailedIsNotRecorded() {
+        store.failDirect = true
+        val recorder = recorder(full = true)
+        recorder.onContactsRead(1_700_000_600)
+        recorder.onChannels(emptyList())
+        runWrites()
+        assertTrue(store.calls.none { it.startsWith("markFullRead") })
+        assertTrue(log.contains("Full read not recorded: its contact list was not stored"))
     }
 
     @Test

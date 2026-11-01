@@ -46,6 +46,10 @@ interface StoreDao {
     )
     fun dropContactsNotSeenSince(radio: String, readAt: Long)
 
+    /** Kept contacts the radio did not list in the read at [readAt] are no longer its favourites. */
+    @Query("UPDATE contacts SET favourite = 0 WHERE radio = :radio AND seen_at < :readAt AND favourite = 1")
+    fun clearFavouritesNotSeenSince(radio: String, readAt: Long)
+
     /** Contacts with a direct-message conversation (decided 1 November 2026: each is kept on the radio as a favourite). */
     @Query(
         "SELECT * FROM contacts c WHERE c.radio = :radio AND EXISTS " +

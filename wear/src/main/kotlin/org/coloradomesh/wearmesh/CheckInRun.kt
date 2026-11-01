@@ -110,7 +110,7 @@ object CheckInRun {
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "WearMesh:check-in")
             .apply {
                 setReferenceCounted(false)
-                acquire(timeLimitMs + sendLimitMs + CLOSE_WAIT_MS + 2 * STORE_WAIT_MS + WAKE_MARGIN_MS)
+                acquire(timeLimitMs + sendLimitMs + KEEP_WAIT_MS + CLOSE_WAIT_MS + 2 * STORE_WAIT_MS + WAKE_MARGIN_MS)
             }
         try {
             checkIn(app, why, timeLimitMs, fullRead, sendLimitMs)
@@ -164,7 +164,9 @@ object CheckInRun {
         // for step 4); once that sync has collected the queue, later messages do.
         val prefs = Prefs.of(app)
         // Settings › Keep contacts on radio: the only time the watch changes the radio's contacts.
+        // On when this run started and still on at each write, so turning it off stops it at once.
         val keepContacts = prefs.getBoolean(Prefs.KEEP_CONTACTS, false)
+        fun keepingNow() = keepContacts && prefs.getBoolean(Prefs.KEEP_CONTACTS, false)
         val backlog = prefs.getString(Prefs.QUIET_SYNC_RADIO, null) == address
         // A channel message waiting to send names only its slot, so a connection that sends one
         // reads the channel list first: a slot given another channel meanwhile loses its waiting
@@ -202,7 +204,7 @@ object CheckInRun {
                 override fun sendDirectText(publicKeyHex: String, text: String): Long? = link.get()?.sendDirectText(publicKeyHex, text)
 
                 // Only with Settings › Keep contacts on radio on: otherwise the watch never changes the radio's contacts.
-                override fun saveContact(contact: Contact): Boolean = keepContacts && link.get()?.saveContact(contact) == true
+                override fun saveContact(contact: Contact): Boolean = keepingNow() && link.get()?.saveContact(contact) == true
             },
             { SpikeLog.log("Check-in: $it") },
             onFailed = { message, status, why -> Notifier.failed(app, address, message, status, why) },
@@ -266,7 +268,7 @@ object CheckInRun {
             onKeep = { contacts ->
                 synchronized(keepLock) { keepWaiting.addAll(contacts.map { it.publicKeyHex }) }
                 for (contact in contacts) {
-                    if (link.get()?.saveContact(contact) != true) synchronized(keepLock) { keepWaiting.remove(contact.publicKeyHex) }
+                    if (!keepingNow() || link.get()?.saveContact(contact) != true) synchronized(keepLock) { keepWaiting.remove(contact.publicKeyHex) }
                 }
                 synchronized(keepLock) {
                     keepPlanned = true

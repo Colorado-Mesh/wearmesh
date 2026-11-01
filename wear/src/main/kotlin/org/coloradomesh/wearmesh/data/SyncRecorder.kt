@@ -49,7 +49,11 @@ class SyncRecorder(
     private val keepContacts: Boolean = false,
 ) : CompanionClient.Listener by also {
     /** Names of the contacts handed to [onKeep] and not yet answered for, by key, for the log. */
-    private val keeping = ConcurrentHashMap<String, String>()
+    private val keeping = ConcurrentHashMap<String, Contact>()
+
+    /** Set on the storage thread once a full read's contact sweep is stored; markFullRead waits on it. */
+    @Volatile
+    private var sweepStored = false
     /** Every contact this connection reads is marked with this time, and a full read with it. */
     private val readAt = clock()
     private val contacts = ArrayList<Contact>()
@@ -91,7 +95,7 @@ class SyncRecorder(
                 if (keepContacts) {
                     for (contact in keep.restore) log("Contacts: putting ${contact.name} (${contact.publicKeyHex.take(12)}) back on the radio, as a favourite")
                     for (contact in keep.favourite) log("Contacts: making ${contact.name} (${contact.publicKeyHex.take(12)}) a favourite on the radio, as someone you message")
-                    for (contact in keep.all) keeping[contact.publicKeyHex] = contact.name
+                    for (contact in keep.all) keeping[contact.publicKeyHex] = contact
                     onKeep(keep.all)
                 } else {
                     if (keep.restore.isNotEmpty()) {
@@ -100,6 +104,7 @@ class SyncRecorder(
                     }
                     onKeep(emptyList())
                 }
+                sweepStored = true
             }
             store.setContactsSince(lastModified)
         }
@@ -111,7 +116,10 @@ class SyncRecorder(
     }
 
     override fun onContactSaved(publicKeyHex: String, saved: Boolean, errorCode: Int?) {
-        val name = keeping.remove(publicKeyHex) ?: publicKeyHex.take(12)
+        val contact = keeping.remove(publicKeyHex)
+        val name = contact?.name ?: publicKeyHex.take(12)
+        // On the radio now, as a favourite: the store shows it so at once, not at the next read.
+        if (saved && contact != null && !finished) write { store.saveContacts(listOf(contact), readAt) }
         if (!saved) {
             val why = errorCode?.let { "error $it" } ?: "no answer"
             log("Contacts: the radio did not take $name ($why); if its list is full, set it to overwrite the oldest, or to add only chat users")
@@ -162,8 +170,11 @@ class SyncRecorder(
     private fun markFullReadIfComplete() {
         if (!plan.fullRead || fullReadMarked || !contactsSwept || !channelsComplete) return
         fullReadMarked = true
-        // Queued after the contact and channel writes, so it is recorded only once they are.
-        write { store.markFullRead(readAt) }
+        // Queued after the contact and channel writes, so it is recorded only once they are, and
+        // not when the contact sweep failed: the next check-in then reads everything again.
+        write {
+            if (sweepStored) store.markFullRead(readAt) else log("Full read not recorded: its contact list was not stored")
+        }
     }
 
     /** True, with a log line, when [what] came after [finish] and will not be stored. */
