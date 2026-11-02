@@ -1,5 +1,7 @@
 # M4 step 2: the Tile
 
+> Replaced on 2 November 2026 by two tiles, Messages and Status: see [tiles.md](tiles.md). What follows is the Tile as first built.
+
 The second part of M4 (plan and decisions in the design doc's M4 plan, 30 October 2026): a WearMesh Tile, one swipe from the watch face. Step 1 was the complication ([M4-step1-complication.md](M4-step1-complication.md)); step 3 is a day's carry with both.
 
 ## What it shows
