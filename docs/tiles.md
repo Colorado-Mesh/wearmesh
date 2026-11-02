@@ -21,9 +21,9 @@ The Open WearMesh button is gone: tapping a message opens the app, and the syste
 | --- | --- |
 | Top | The mode: "Check-in every 15 min", "Live" or "Quit" |
 | Middle | Large: when the watch last reached the radio ("2:14 PM", under "Last synced"), or in Live the link's state ("Connected"). Then, as they apply: "Next 2:29 PM" (the next check-in), "Radio 78% · W0RMT-T1n" (the radio's battery, estimated from its voltage, and its node name), and "Last try failed" when the last sync did not work |
-| Bottom | **Check now** |
+| Bottom | **Check now**: in Check-in, a check at once; in Live, WearMesh opens and keeps the link, or starts it |
 
-The radio's battery is the last reading, from Live or a check-in, and is left out once it is more than 6 hours old. The next check-in is the time the alarm was set for; Doze can make it a few minutes late.
+The radio's battery is the last reading, from Live or a check-in, and is left out once it is more than 6 hours old (or dated after now, if the watch's clock was set back); the tile asks Wear OS to draw it again at that moment. The next check-in is the time the alarm was set for; Doze can make it a few minutes late.
 
 ## Battery
 
@@ -33,7 +33,7 @@ Neither tile has a timer: times are clock times, and both are redrawn only when 
 
 1. **Add both.** From the tile list, add WearMesh messages and WearMesh status.
 2. **Messages, with something unread.** The bottom chip says Reply and opens the quick replies for that conversation.
-3. **Messages, all read.** The chip says Check now, and opens WearMesh, which checks at once.
+3. **Messages, all read.** The chip says Check now, and opens WearMesh. In Check-in it checks at once; in Live it keeps the link, or starts it.
 4. **Status in Check-in.** It shows the mode, the last sync time, the next check-in, and the radio's battery and name. After Check now, the time moves on.
 5. **Status in Live.** It shows "Live" and "Connected". After Quit, "Quit".
-6. **A failed try.** Turn the radio off and tap Check now: "Last try failed" appears, and goes once a sync works again.
+6. **A failed try, in Check-in.** Turn the radio off and tap Check now: "Last try failed" appears, and goes once a sync works again.

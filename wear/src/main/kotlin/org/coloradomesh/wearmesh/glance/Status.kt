@@ -37,7 +37,7 @@ data class Status(
         }
         val details = ArrayList<String>()
         if (mode == Mode.CHECK_IN && nextCheckInAt > now) details.add("Next ${time(nextCheckInAt)}")
-        val battery = RadioBattery.percent(radioMillivolts)?.takeIf { now - radioMillivoltsAt < BATTERY_FRESH_MS }
+        val battery = RadioBattery.percent(radioMillivolts)?.takeIf { batteryFresh(now) }
         val radio = listOfNotNull(battery?.let { "Radio $it%" }, radioName).joinToString(" · ")
         if (radio.isNotEmpty()) details.add(radio)
         // Saved when a sync fails and removed when one works, so it is there only after a failure.
@@ -45,6 +45,20 @@ data class Status(
         val warning = lastProblem?.let { "Last try failed" }
         return Lines(heading, big, label, details, warning)
     }
+
+    /**
+     * Whether the battery reading is recent enough to show. Its age must be 0 to 6 hours: a
+     * reading dated after now (the watch's clock set back since) is not shown, as its age is unknown.
+     */
+    private fun batteryFresh(now: Long) = radioMillivoltsAt > 0 && now - radioMillivoltsAt in 0 until BATTERY_FRESH_MS
+
+    /**
+     * How long the tile drawn [now] stays right, for the tile's freshness interval: until the
+     * battery reading it shows grows too old. 0 when nothing in it expires, so Wear OS redraws it
+     * only when the app asks. No timer of the app's, and the radio is not woken.
+     */
+    fun freshForMs(now: Long): Long =
+        if (RadioBattery.percent(radioMillivolts) != null && batteryFresh(now)) radioMillivoltsAt + BATTERY_FRESH_MS - now else 0
 
     companion object {
         /** A battery reading older than this is not shown: the radio may have charged or run down since. */

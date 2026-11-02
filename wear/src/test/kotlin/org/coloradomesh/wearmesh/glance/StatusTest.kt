@@ -51,6 +51,22 @@ class StatusTest {
     }
 
     @Test
+    fun aReadingDatedAfterNowIsLeftOut() {
+        // The watch's clock was set back after the reading.
+        val lines = status(millivoltsAt = now + 60_000).lines(now, time)
+        assertEquals(listOf("Next t+11", "W0RMT-T1n"), lines.details)
+        assertEquals(0, status(millivoltsAt = now + 60_000).freshForMs(now))
+    }
+
+    @Test
+    fun theTileIsFreshUntilTheBatteryReadingExpires() {
+        assertEquals(Status.BATTERY_FRESH_MS - 60_000, status(millivoltsAt = now - 60_000).freshForMs(now))
+        // Nothing expires: redrawn only when the app asks.
+        assertEquals(0, status(millivolts = 0).freshForMs(now))
+        assertEquals(0, status(millivoltsAt = now - Status.BATTERY_FRESH_MS).freshForMs(now))
+    }
+
+    @Test
     fun neverSynced() {
         val lines = status(lastSyncAt = 0, mode = Status.Mode.QUIT).lines(now, time)
         assertEquals("Quit", lines.heading)

@@ -27,7 +27,8 @@ import java.util.Date
  *   then when the next check-in is due, the radio's battery and name, and a failed last try;
  * - one action along the bottom: Check now.
  * Clock times rather than "4 min ago", so it needs no timer. Updated with the Messages tile
- * ([Glances.refresh]); it reads saved settings only and never wakes the radio.
+ * ([Glances.refresh]), and by Wear OS when the battery reading shown expires ([Status.freshForMs]);
+ * it reads saved settings only and never wakes the radio.
  */
 class WearMeshStatusTileService : TileService() {
     override fun onTileRequest(requestParams: RequestBuilders.TileRequest): ListenableFuture<TileBuilders.Tile> =
@@ -50,7 +51,8 @@ class WearMeshStatusTileService : TileService() {
 
     private fun tile(status: Status, device: DeviceParameters): TileBuilders.Tile {
         val format = DateFormat.getTimeFormat(this)
-        val lines = status.lines(System.currentTimeMillis()) { format.format(Date(it)) }
+        val now = System.currentTimeMillis()
+        val lines = status.lines(now) { format.format(Date(it)) }
         val content = LayoutElementBuilders.Column.Builder()
             .setWidth(expand())
             .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_CENTER)
@@ -69,6 +71,8 @@ class WearMeshStatusTileService : TileService() {
         return TileBuilders.Tile.Builder()
             .setResourcesVersion(RESOURCES_VERSION)
             .setTileTimeline(TimelineBuilders.Timeline.fromLayoutElement(layout))
+            // Drawn again when the battery reading it shows expires, so it does not linger.
+            .setFreshnessIntervalMillis(status.freshForMs(now))
             .build()
     }
 
