@@ -30,7 +30,9 @@ object SyncStatus {
 
     fun finished(context: Context, problem: String?) {
         val now = System.currentTimeMillis()
-        if (problem == null) Prefs.of(context).edit().putLong(Prefs.LAST_SYNC_AT, now).apply()
+        val edit = Prefs.of(context).edit().putLong(Prefs.LAST_ATTEMPT_AT, now)
+        if (problem == null) edit.putLong(Prefs.LAST_SYNC_AT, now).remove(Prefs.LAST_PROBLEM) else edit.putString(Prefs.LAST_PROBLEM, problem)
+        edit.apply()
         current.update {
             State(syncing = false, lastSyncAt = if (problem == null) now else it.lastSyncAt, problem = problem, lastAttemptAt = now)
         }

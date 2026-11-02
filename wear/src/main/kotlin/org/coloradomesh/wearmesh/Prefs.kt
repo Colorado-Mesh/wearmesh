@@ -56,6 +56,17 @@ object Prefs {
      */
     const val KEEP_CONTACTS = "keep_contacts"
 
+    /** When the next check-in alarm is due, by the watch's clock; unset when none is set. For the Status tile. */
+    const val NEXT_CHECK_IN_AT = "next_check_in_at"
+
+    /** The radio's last battery reading in millivolts, and when it came (watch clock); for the Status tile. */
+    const val RADIO_MILLIVOLTS = "radio_millivolts"
+    const val RADIO_MILLIVOLTS_AT = "radio_millivolts_at"
+
+    /** When the last sync ended, worked or not, and why it failed when it did; for the Status tile. */
+    const val LAST_ATTEMPT_AT = "last_attempt_at"
+    const val LAST_PROBLEM = "last_problem"
+
     fun of(context: Context): SharedPreferences =
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 }

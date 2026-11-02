@@ -4,6 +4,8 @@ import android.content.ComponentName
 import android.content.Context
 import androidx.wear.tiles.TileService
 import androidx.wear.watchface.complications.datasource.ComplicationDataSourceUpdateRequester
+import org.coloradomesh.wearmesh.CheckIn
+import org.coloradomesh.wearmesh.Mode
 import org.coloradomesh.wearmesh.Prefs
 import org.coloradomesh.wearmesh.SpikeLog
 import org.coloradomesh.wearmesh.SpikeState
@@ -30,7 +32,8 @@ object Glances {
         val unread = Glance.unread(lasts, channels, choices)
         fun message(row: MessageRow) =
             GlanceMessage(row.conversation, Notifier.titleFor(context, radio, row.conversation), row.sender, row.body, unread = !row.read)
-        val heard = Glance.heard(dao.newestReceived(radio, Glance.TILE_MESSAGES)).map(::message)
+        // As many as a large watch shows; a smaller one shows the first Glance.TILE_MESSAGES.
+        val heard = Glance.heard(dao.newestReceived(radio, Glance.TILE_MESSAGES_LARGE), Glance.TILE_MESSAGES_LARGE).map(::message)
         // Enough rows that, with quiet channels left out, one that counts is almost always among them.
         val replyTo = Glance.newest(dao.newestUnread(radio, NEWEST_ROWS), channels, choices, limit = 1).firstOrNull()?.let(::message)
         val chosen = complicationChannel(context, radio)
@@ -61,11 +64,45 @@ object Glances {
         } catch (e: RuntimeException) {
             SpikeLog.log("Glance: could not ask for a complication update (${e.message})")
         }
-        try {
-            TileService.getUpdater(app).requestUpdate(WearMeshTileService::class.java)
-        } catch (e: RuntimeException) {
-            SpikeLog.log("Glance: could not ask for a Tile update (${e.message})")
+        for (tile in listOf(WearMeshTileService::class.java, WearMeshStatusTileService::class.java)) {
+            try {
+                TileService.getUpdater(app).requestUpdate(tile)
+            } catch (e: RuntimeException) {
+                SpikeLog.log("Glance: could not ask for a Tile update (${e.message})")
+            }
         }
+    }
+
+    /** What the Status tile shows, from what the app has saved. Reads settings only. */
+    fun status(context: Context): Status {
+        val prefs = Prefs.of(context)
+        val state = SpikeState.state.value
+        return Status(
+            mode = when {
+                Mode.hasQuit(context) -> Status.Mode.QUIT
+                Mode.get(context) == Mode.Kind.CHECK_IN -> Status.Mode.CHECK_IN
+                else -> Status.Mode.LIVE
+            },
+            intervalMinutes = CheckIn.intervalMinutes(context),
+            liveLink = state.takeIf { it.running }?.link,
+            // The radio's node name, from its greeting.
+            radioName = prefs.getString(Prefs.SELF_NAME, null),
+            lastSyncAt = prefs.getLong(Prefs.LAST_SYNC_AT, 0),
+            lastAttemptAt = prefs.getLong(Prefs.LAST_ATTEMPT_AT, 0),
+            lastProblem = prefs.getString(Prefs.LAST_PROBLEM, null),
+            nextCheckInAt = prefs.getLong(Prefs.NEXT_CHECK_IN_AT, 0),
+            radioMillivolts = prefs.getInt(Prefs.RADIO_MILLIVOLTS, 0),
+            radioMillivoltsAt = prefs.getLong(Prefs.RADIO_MILLIVOLTS_AT, 0),
+        )
+    }
+
+    /** Keeps the radio's battery reading for the Status tile. Cheap: one settings write. */
+    fun radioBattery(context: Context, millivolts: Int) {
+        if (millivolts <= 0) return
+        Prefs.of(context).edit()
+            .putInt(Prefs.RADIO_MILLIVOLTS, millivolts)
+            .putLong(Prefs.RADIO_MILLIVOLTS_AT, System.currentTimeMillis())
+            .apply()
     }
 
     private const val NEWEST_ROWS = 50

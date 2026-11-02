@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">WearMesh</string>
+    <!-- The two tiles' names in the watch's tile list. -->
+    <string name="tile_messages">WearMesh messages</string>
+    <string name="tile_status">WearMesh status</string>
     <string name="channel_link">Radio link</string>
     <string name="channel_check_in">Check-in</string>
     <string name="channel_direct">Direct messages</string>

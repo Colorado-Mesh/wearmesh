@@ -239,6 +239,9 @@ object CheckInRun {
                 RadioClock.describe(radioSeconds, clientSeconds, setting)?.let { SpikeLog.log("Check-in: $it") }
             }
 
+            // For the Status tile: the radio's battery as last read.
+            override fun onBattery(millivolts: Int) = Glances.radioBattery(app, millivolts)
+
             override fun onQueueEmpty() {
                 if (outcome.isCompleted) return
                 if (sendLimitMs > 0) sender.sendPending { sendsDone.complete(Unit) } else sendsDone.complete(Unit)

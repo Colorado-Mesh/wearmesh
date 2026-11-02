@@ -1,6 +1,7 @@
 package org.coloradomesh.wearmesh
 
 import android.content.Context
+import org.coloradomesh.wearmesh.glance.Glances
 
 /**
  * Live or Check-in (M2 step 4): one choice in Settings in place of separate Check-in and Live
@@ -37,6 +38,8 @@ object Mode {
             }
         }
         SpikeLog.log("Mode: ${if (kind == Kind.LIVE) "Live" else "Check-in"}")
+        // The tiles show the mode.
+        Glances.refresh(context)
     }
 
     /**
@@ -49,6 +52,8 @@ object Mode {
         if (SpikeState.state.value.running) SpikeService.stop(context)
         CheckIn.cancelAlarm(context)
         SpikeLog.log("Quit: Live stopped and check-ins cancelled until WearMesh is opened again")
+        // The tiles show the mode.
+        Glances.refresh(context)
     }
 
     fun hasQuit(context: Context): Boolean = Prefs.of(context).getBoolean(Prefs.QUIT, false)
@@ -62,6 +67,8 @@ object Mode {
         Prefs.of(context).edit().remove(Prefs.QUIT).apply()
         val kind = get(context)
         SpikeLog.log("Opened after Quit: back to ${if (kind == Kind.LIVE) "Live" else "Check-in"}")
+        // The tiles show the mode.
+        Glances.refresh(context)
         if (kind == Kind.CHECK_IN) CheckIn.scheduleNext(context)
     }
 

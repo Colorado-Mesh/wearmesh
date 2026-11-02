@@ -28,8 +28,12 @@ data class Glance(
     val channel: ChannelCount? = null,
 ) {
     companion object {
-        /** How many messages the Tile shows (decided for M4). */
+        /** How many messages the Tile shows (decided for M4), and on a watch at least [LARGE_SCREEN_DP] wide. */
         const val TILE_MESSAGES = 2
+        const val TILE_MESSAGES_LARGE = 3
+
+        /** Google's breakpoint for larger watch screens, from which a tile shows more. */
+        const val LARGE_SCREEN_DP = 225
 
         /** Of [rows], the messages received (not sent by the watch), newest first. */
         fun heard(rows: List<MessageRow>, limit: Int = TILE_MESSAGES): List<MessageRow> =

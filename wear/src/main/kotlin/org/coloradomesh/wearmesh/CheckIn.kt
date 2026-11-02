@@ -56,7 +56,10 @@ object CheckIn {
     }
 
     /** Cancels the next check-in without turning Check-in off, for Quit. */
-    fun cancelAlarm(context: Context) = alarms(context).cancel(alarmIntent(context))
+    fun cancelAlarm(context: Context) {
+        alarms(context).cancel(alarmIntent(context))
+        Prefs.of(context).edit().remove(Prefs.NEXT_CHECK_IN_AT).apply()
+    }
 
     /**
      * Sets the next alarm, replacing any already set. Called by each alarm, after a restart or an
@@ -75,7 +78,9 @@ object CheckIn {
             SystemClock.elapsedRealtime() + delay,
             alarmIntent(context),
         )
-        SpikeLog.log("Check-in: next at ${SpikeLog.clock(System.currentTimeMillis() + delay)}")
+        val at = System.currentTimeMillis() + delay
+        Prefs.of(context).edit().putLong(Prefs.NEXT_CHECK_IN_AT, at).apply()
+        SpikeLog.log("Check-in: next at ${SpikeLog.clock(at)}")
     }
 
     /** Why a check-in runs when Check now is tapped: a brief read, like a scheduled one. */
