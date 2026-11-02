@@ -102,14 +102,23 @@ object Glances {
 
     /**
      * Keeps the radio's battery reading for the Status tile, and redraws that tile when the
-     * figure it shows changes (or the last reading had grown too old to show). Live reads the
+     * figure it shows changes (or the last reading had grown too old to show). A reading of 0,
+     * from a radio that cannot measure its battery, clears it. Live reads the
      * battery every few minutes and the figure moves rarely, so redraws are rare. Cheap enough
      * for the protocol's callback: a settings write that does not wait for the disk, and a
      * request Wear OS handles later.
      */
     fun radioBattery(context: Context, millivolts: Int) {
-        if (millivolts <= 0) return
         val prefs = Prefs.of(context)
+        if (millivolts <= 0) {
+            // The radio cannot measure it: forget an earlier reading, rather than show it for
+            // hours. Only a change redraws, so a radio that never measures costs nothing.
+            if (prefs.contains(Prefs.RADIO_MILLIVOLTS)) {
+                prefs.edit().remove(Prefs.RADIO_MILLIVOLTS).remove(Prefs.RADIO_MILLIVOLTS_AT).apply()
+                requestTile(context.applicationContext, WearMeshStatusTileService::class.java)
+            }
+            return
+        }
         val now = System.currentTimeMillis()
         val before = prefs.getLong(Prefs.RADIO_MILLIVOLTS_AT, 0)
             .takeIf { now - it in 0 until Status.BATTERY_FRESH_MS }

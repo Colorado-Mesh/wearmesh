@@ -111,6 +111,7 @@ class SpikeService : Service() {
                 recorder = null
                 endOutbox()
                 SpikeState.update { SpikeState.Snapshot(running = true, link = "Connecting…") }
+                Glances.refresh(this)
                 SpikeLog.log("M0: connecting to $target; watch battery ${watchBattery()}%")
                 openSession()
             }
@@ -257,8 +258,9 @@ class SpikeService : Service() {
         // (the radio not answering) would otherwise retry at the shortest pause for ever.
         releaseWakeLock()
         SpikeLog.log("M0: link up, packet size $packetSize bytes")
-        Glances.refresh(this)
         SpikeState.update { it.copy(link = "Connected", packetSize = packetSize) }
+        // After the state changes, so the tiles read the new link state.
+        Glances.refresh(this)
         goForeground("Connected")
     }
 
@@ -282,6 +284,8 @@ class SpikeService : Service() {
         reconnects++
         SpikeLog.log("M0: reconnecting in ${pause / 1000} s (try $reconnects)")
         SpikeState.update { it.copy(link = "Reconnecting in ${pause / 1000} s", packetSize = null) }
+        // So the tiles stop saying Connected. Once per reconnect, which backs off to minutes.
+        Glances.refresh(this)
         goForeground("Link lost; reconnecting")
         main.postDelayed(reconnectTimer, pause)
         val alarms = getSystemService(AlarmManager::class.java)
