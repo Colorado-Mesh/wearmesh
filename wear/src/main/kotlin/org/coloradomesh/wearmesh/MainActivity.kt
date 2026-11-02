@@ -548,9 +548,11 @@ class MainActivity : ComponentActivity() {
                     // refused, it stays, with the text, so nothing typed is lost.
                     onSend = { body ->
                         withPermissions {
-                            Outbox.send(this@MainActivity, key, body)
-                            // A tick to say it is on its way (the design's haptic on send).
-                            window.decorView.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                            // A tick to say it is on its way (the design's haptic on send), once it
+                            // is stored: the write runs on the storage thread, so a moment after Send.
+                            Outbox.send(this@MainActivity, key, body) {
+                                if (!isDestroyed) window.decorView.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                            }
                             nav.popBackStack()
                         }
                     },
