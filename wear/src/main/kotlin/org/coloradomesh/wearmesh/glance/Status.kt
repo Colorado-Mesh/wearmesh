@@ -14,7 +14,6 @@ data class Status(
     val liveLink: String?,
     val radioName: String?,
     val lastSyncAt: Long,
-    val lastAttemptAt: Long,
     val lastProblem: String?,
     val nextCheckInAt: Long,
     val radioMillivolts: Int,
@@ -41,8 +40,9 @@ data class Status(
         val battery = RadioBattery.percent(radioMillivolts)?.takeIf { now - radioMillivoltsAt < BATTERY_FRESH_MS }
         val radio = listOfNotNull(battery?.let { "Radio $it%" }, radioName).joinToString(" · ")
         if (radio.isNotEmpty()) details.add(radio)
-        // A try that failed after the last sync that worked.
-        val warning = lastProblem?.takeIf { lastAttemptAt > lastSyncAt }?.let { "Last try failed" }
+        // Saved when a sync fails and removed when one works, so it is there only after a failure.
+        // Not by comparing times, which a correction of the watch's clock can reorder.
+        val warning = lastProblem?.let { "Last try failed" }
         return Lines(heading, big, label, details, warning)
     }
 

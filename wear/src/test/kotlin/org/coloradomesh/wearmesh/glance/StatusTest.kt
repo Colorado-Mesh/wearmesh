@@ -12,12 +12,11 @@ class StatusTest {
         mode: Status.Mode = Status.Mode.CHECK_IN,
         liveLink: String? = null,
         lastSyncAt: Long = now - 4 * 60_000,
-        lastAttemptAt: Long = now - 4 * 60_000,
         lastProblem: String? = null,
         nextCheckInAt: Long = now + 11 * 60_000,
         millivolts: Int = 3_990,
         millivoltsAt: Long = now - 60_000,
-    ) = Status(mode, 15, liveLink, "W0RMT-T1n", lastSyncAt, lastAttemptAt, lastProblem, nextCheckInAt, millivolts, millivoltsAt)
+    ) = Status(mode, 15, liveLink, "W0RMT-T1n", lastSyncAt, lastProblem, nextCheckInAt, millivolts, millivoltsAt)
 
     @Test
     fun checkInShowsTheLastSyncTheNextAndTheRadio() {
@@ -39,11 +38,10 @@ class StatusTest {
     }
 
     @Test
-    fun aFailedTryAfterTheLastSyncIsShown() {
-        val lines = status(lastAttemptAt = now - 60_000, lastProblem = "Could not connect").lines(now, time)
-        assertEquals("Last try failed", lines.warning)
-        // An old failure, before the last sync, is not.
-        assertNull(status(lastAttemptAt = now - 10 * 60_000, lastSyncAt = now - 4 * 60_000, lastProblem = "x").lines(now, time).warning)
+    fun aFailedLastTryIsShown() {
+        assertEquals("Last try failed", status(lastProblem = "Could not connect").lines(now, time).warning)
+        // Even if the watch's clock was set back, so the failure looks older than the last sync.
+        assertEquals("Last try failed", status(lastSyncAt = now + 60 * 60_000, lastProblem = "x").lines(now, time).warning)
     }
 
     @Test
@@ -54,7 +52,7 @@ class StatusTest {
 
     @Test
     fun neverSynced() {
-        val lines = status(lastSyncAt = 0, lastAttemptAt = 0, mode = Status.Mode.QUIT).lines(now, time)
+        val lines = status(lastSyncAt = 0, mode = Status.Mode.QUIT).lines(now, time)
         assertEquals("Quit", lines.heading)
         assertEquals("Not synced yet", lines.label)
     }

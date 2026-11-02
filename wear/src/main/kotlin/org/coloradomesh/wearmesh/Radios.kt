@@ -4,6 +4,7 @@ import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.coloradomesh.wearmesh.data.Storage
+import org.coloradomesh.wearmesh.glance.Glances
 import org.coloradomesh.wearmesh.notify.Notifier
 
 /**
@@ -41,9 +42,12 @@ object Radios {
         if (switching) {
             // Its next sync brings what queued while it was not in use: stored, but not notified.
             edit.remove(Prefs.SELF_NAME).remove(Prefs.LAST_SYNC_AT).putString(Prefs.QUIET_SYNC_RADIO, radio.address)
+            Glances.forgetRadioStatus(edit)
             SyncStatus.reset()
         }
         edit.apply()
+        // The tiles and complication show the radio in use.
+        if (switching) Glances.refresh(context)
         Storage.refreshCounts(context)
         SpikeLog.log("Radio: now using ${radio.name} (${radio.address})")
         Notifier.loadChoices(context, radio.address)
@@ -56,11 +60,15 @@ object Radios {
         val known = KnownRadios.remove(KnownRadios.parse(prefs.getString(Prefs.RADIOS, null)), address)
         // Its complication channel goes too, so a radio added again starts on all that notify.
         val edit = prefs.edit().putString(Prefs.RADIOS, KnownRadios.format(known)).remove(Prefs.COMPLICATION_CHANNEL + address)
+        var inUse = false
         if (prefs.getString(Prefs.RADIO_ADDRESS, null) == address) {
             edit.remove(Prefs.RADIO_ADDRESS).remove(Prefs.RADIO_NAME).remove(Prefs.SELF_NAME).remove(Prefs.LAST_SYNC_AT)
+            Glances.forgetRadioStatus(edit)
             SyncStatus.reset()
+            inUse = true
         }
         edit.apply()
+        if (inUse) Glances.refresh(context)
         val store = Storage.store(context, address)
         Storage.later { store.forget() }
         Notifier.clearChoices(context, address)

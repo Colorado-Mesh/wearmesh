@@ -2,8 +2,10 @@ package org.coloradomesh.wearmesh.glance
 
 import android.content.ComponentName
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.wear.tiles.TileService
 import androidx.wear.watchface.complications.datasource.ComplicationDataSourceUpdateRequester
+import org.coloradomesh.meshcore.protocol.RadioBattery
 import org.coloradomesh.wearmesh.CheckIn
 import org.coloradomesh.wearmesh.Mode
 import org.coloradomesh.wearmesh.Prefs
@@ -64,12 +66,15 @@ object Glances {
         } catch (e: RuntimeException) {
             SpikeLog.log("Glance: could not ask for a complication update (${e.message})")
         }
-        for (tile in listOf(WearMeshTileService::class.java, WearMeshStatusTileService::class.java)) {
-            try {
-                TileService.getUpdater(app).requestUpdate(tile)
-            } catch (e: RuntimeException) {
-                SpikeLog.log("Glance: could not ask for a Tile update (${e.message})")
-            }
+        requestTile(app, WearMeshTileService::class.java)
+        requestTile(app, WearMeshStatusTileService::class.java)
+    }
+
+    private fun requestTile(app: Context, tile: Class<out TileService>) {
+        try {
+            TileService.getUpdater(app).requestUpdate(tile)
+        } catch (e: RuntimeException) {
+            SpikeLog.log("Glance: could not ask for a Tile update (${e.message})")
         }
     }
 
@@ -88,7 +93,6 @@ object Glances {
             // The radio's node name, from its greeting.
             radioName = prefs.getString(Prefs.SELF_NAME, null),
             lastSyncAt = prefs.getLong(Prefs.LAST_SYNC_AT, 0),
-            lastAttemptAt = prefs.getLong(Prefs.LAST_ATTEMPT_AT, 0),
             lastProblem = prefs.getString(Prefs.LAST_PROBLEM, null),
             nextCheckInAt = prefs.getLong(Prefs.NEXT_CHECK_IN_AT, 0),
             radioMillivolts = prefs.getInt(Prefs.RADIO_MILLIVOLTS, 0),
@@ -96,14 +100,33 @@ object Glances {
         )
     }
 
-    /** Keeps the radio's battery reading for the Status tile. Cheap: one settings write. */
+    /**
+     * Keeps the radio's battery reading for the Status tile, and redraws that tile when the
+     * figure it shows changes (or the last reading had grown too old to show). Live reads the
+     * battery every few minutes and the figure moves rarely, so redraws are rare. Cheap enough
+     * for the protocol's callback: a settings write that does not wait for the disk, and a
+     * request Wear OS handles later.
+     */
     fun radioBattery(context: Context, millivolts: Int) {
         if (millivolts <= 0) return
-        Prefs.of(context).edit()
+        val prefs = Prefs.of(context)
+        val now = System.currentTimeMillis()
+        val before = prefs.getLong(Prefs.RADIO_MILLIVOLTS_AT, 0)
+            .takeIf { now - it in 0 until Status.BATTERY_FRESH_MS }
+            ?.let { RadioBattery.percent(prefs.getInt(Prefs.RADIO_MILLIVOLTS, 0)) }
+        prefs.edit()
             .putInt(Prefs.RADIO_MILLIVOLTS, millivolts)
-            .putLong(Prefs.RADIO_MILLIVOLTS_AT, System.currentTimeMillis())
+            .putLong(Prefs.RADIO_MILLIVOLTS_AT, now)
             .apply()
+        if (RadioBattery.percent(millivolts) != before) requestTile(context.applicationContext, WearMeshStatusTileService::class.java)
     }
+
+    /**
+     * Forgets what the Status tile shows of the radio in use (its battery and a failed try), as
+     * when another radio is chosen or it is forgotten, so none of it shows under another radio.
+     */
+    fun forgetRadioStatus(edit: SharedPreferences.Editor): SharedPreferences.Editor =
+        edit.remove(Prefs.RADIO_MILLIVOLTS).remove(Prefs.RADIO_MILLIVOLTS_AT).remove(Prefs.LAST_PROBLEM)
 
     private const val NEWEST_ROWS = 50
 }

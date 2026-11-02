@@ -63,8 +63,7 @@ object Prefs {
     const val RADIO_MILLIVOLTS = "radio_millivolts"
     const val RADIO_MILLIVOLTS_AT = "radio_millivolts_at"
 
-    /** When the last sync ended, worked or not, and why it failed when it did; for the Status tile. */
-    const val LAST_ATTEMPT_AT = "last_attempt_at"
+    /** Why the last sync failed; removed when one works. For the Status tile. */
     const val LAST_PROBLEM = "last_problem"
 
     fun of(context: Context): SharedPreferences =
