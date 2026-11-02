@@ -132,7 +132,7 @@ class RoomMessageStore(private val db: WearMeshDatabase, override val address: S
     override fun pendingOutgoing(): List<OutgoingMessage> =
         dao.pendingOutgoing(address).map { OutgoingMessage(it.id, it.conversation, it.body, it.receivedAt) }
 
-    override fun setOutgoingStatus(id: Long, status: OutgoingStatus) = dao.setStatus(address, id, status.name)
+    override fun setOutgoingStatus(id: Long, status: OutgoingStatus): Boolean = dao.setStatus(address, id, status.name) > 0
 
     override fun retryOutgoing(id: Long, at: Long): Boolean = dao.retry(address, id, at) > 0
 

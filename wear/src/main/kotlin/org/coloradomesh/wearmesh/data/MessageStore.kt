@@ -152,7 +152,8 @@ interface MessageStore {
     /** Messages still to send, oldest first. */
     fun pendingOutgoing(): List<OutgoingMessage>
 
-    fun setOutgoingStatus(id: Long, status: OutgoingStatus)
+    /** False when there is no such message of the watch's any more (its conversation was deleted). */
+    fun setOutgoingStatus(id: Long, status: OutgoingStatus): Boolean
 
     /**
      * Sends the failed message [id] again: it waits as if written at [at]. False when it is not

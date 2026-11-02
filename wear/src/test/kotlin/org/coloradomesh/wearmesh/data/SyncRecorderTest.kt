@@ -50,7 +50,7 @@ class SyncRecorderTest {
         override fun counts() = StoreCounts(messages.size, 0, 0, 0)
         override fun addOutgoing(conversation: String, sender: String, body: String, at: Long) = -1L
         override fun pendingOutgoing() = emptyList<OutgoingMessage>()
-        override fun setOutgoingStatus(id: Long, status: OutgoingStatus) {}
+        override fun setOutgoingStatus(id: Long, status: OutgoingStatus) = false
         override fun retryOutgoing(id: Long, at: Long) = false
         override fun hasContact(prefix: String) = false
         var direct = emptyList<KeptContact>()

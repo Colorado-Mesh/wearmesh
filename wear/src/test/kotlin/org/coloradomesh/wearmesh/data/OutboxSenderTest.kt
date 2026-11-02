@@ -36,8 +36,10 @@ class OutboxSenderTest {
             return id
         }
         override fun pendingOutgoing() = messages.values.filter { statuses[it.id] == OutgoingStatus.SENDING }
-        override fun setOutgoingStatus(id: Long, status: OutgoingStatus) {
+        override fun setOutgoingStatus(id: Long, status: OutgoingStatus): Boolean {
+            if (id !in messages) return false
             statuses[id] = status
+            return true
         }
         val contacts = HashSet<String>()
         override fun hasContact(prefix: String) = prefix in contacts
@@ -234,6 +236,45 @@ class OutboxSenderTest {
         runWrites()
         assertEquals(listOf("d:0000000000ff Yes", "save W0RMT-M9 flags 1 path -1"), radio.sent)
         assertTrue(!sender.busy())
+    }
+
+    @Test
+    fun deletedMessagesMakeRoomForThoseHeldBack() {
+        store.kept.add(KeptContact("0000000000ff" + "11".repeat(26), "W0RMT-M9", Contact.TYPE_COMPANION, 1_700_000_000))
+        val ids = (1..4).map { write("d:0000000000ff", "m$it") }
+        val held = write("c:0", "held back")
+        sender.sendPending()
+        runWrites()
+        // Four with the radio, the fifth held back; all four are refused, and wait for one save.
+        assertEquals(4, radio.sent.size)
+        for (id in 100L..103L) {
+            sender.onDirectRefused(id, CompanionClient.ERROR_NOT_FOUND)
+            sender.onDirectResult(id, DirectOutcome.REFUSED)
+        }
+        runWrites()
+        // The conversation is deleted before the save is confirmed.
+        for (id in ids) {
+            store.messages.remove(id)
+            store.statuses.remove(id)
+        }
+        sender.onContactSaved("0000000000ff" + "11".repeat(26), saved = true, errorCode = null)
+        runWrites()
+        assertEquals("c:0 held back", radio.sent.last())
+        assertEquals(OutgoingStatus.SENDING, store.statuses[held])
+    }
+
+    @Test
+    fun noFailureIsToldOfForAMessageDeletedMeanwhile() {
+        val told = ArrayList<Long>()
+        val failing = OutboxSender(store, writer, radio, { log.add(it) }, { now }, onFailed = { message, _, _ -> told.add(message.id) })
+        val id = write("d:0000000000ff", "Yes")
+        failing.sendPending()
+        runWrites()
+        store.messages.remove(id)
+        failing.onDirectRefused(100, 5)
+        failing.onDirectResult(100, DirectOutcome.REFUSED)
+        runWrites()
+        assertTrue(told.isEmpty())
     }
 
     @Test

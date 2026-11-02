@@ -156,7 +156,7 @@ interface StoreDao {
     fun pendingCount(radio: String, conversation: String): Int
 
     @Query("UPDATE messages SET status = :status WHERE radio = :radio AND id = :id AND outgoing = 1")
-    fun setStatus(radio: String, id: Long, status: String)
+    fun setStatus(radio: String, id: Long, status: String): Int
 
     /** A failed message waits to send again, as if written at [at]; returns the rows changed. */
     @Query(
