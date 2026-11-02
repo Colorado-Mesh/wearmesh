@@ -102,7 +102,7 @@ Battery targets are set after the M0 spike measures real drain per mode.
 
 ## UI and input design
 
-The app has three screens and three glanceable surfaces, built for one-handed use in the field. The table is as built (updated 2 November 2026).
+The app has three messaging screens and three glanceable surfaces, built for one-handed use in the field; the radios, settings and diagnostics screens are in the [README](../README.md). The table is as built (updated 2 November 2026).
 
 | Surface | Shows | Actions |
 | --- | --- | --- |
@@ -124,7 +124,8 @@ The app has three screens and three glanceable surfaces, built for one-handed us
 **Feedback**
 
 - A channel send returns OK or ERR from the radio, not a delivery receipt, so the UI says Sent to radio, not Delivered. Direct messages carry an ACK, so they show Delivered once it arrives.
-- Haptic tick on send (done 2 November 2026: a confirm tick when Send or a quick reply stores the message to send); distinct vibration for incoming messages, adjustable per channel (as built, direct messages and channels are two notification channels, each set in the watch's settings; a vibration for each channel is not needed for v1, decided 2 November 2026).
+- Haptic tick on send (done 2 November 2026: a confirm tick when Send or a quick reply stores the message to send).
+- Incoming messages vibrate as the watch's notification settings say, set separately for direct messages and for channels, the app's two notification channels. A vibration for each channel is not needed for v1 (decided 2 November 2026).
 
 ## Data and storage
 
@@ -188,7 +189,8 @@ Four milestones, each ending in a go/no-go check; the first is a throwaway spike
    - Steps: (1) complication, [M4-step1-complication.md](M4-step1-complication.md); (2) Tile, [M4-step2-tile.md](M4-step2-tile.md); (3) carry, [M4-step3-carry.md](M4-step3-carry.md).
    - Changed (31 October 2026): the Tile shows the last two messages heard, read or not, from any conversation; the complication can count one channel chosen in Settings › Complication, showing the count over the channel's short name ([M4-glance-changes.md](M4-glance-changes.md)).
    - Complete (1 November 2026): the carry used no more battery than M2 (about 0.8% an hour overnight in Check-in, about 2% an hour in Live), once wireless debugging, which had doubled the drain, was off ([M4-step3-carry.md](M4-step3-carry.md)). A day on stock MeshCore firmware found no differences from zephcore ([stock-firmware.md](stock-firmware.md)).
-   - Changed (2 November 2026): the one Tile became two, Messages and Status, after Google's tile guidance ([tiles.md](tiles.md)). Both tiles, the complication, and crown scrolling on every long screen passed on the watch.
+   - Changed (2 November 2026): the one Tile became two, Messages and Status, after Google's tile guidance ([tiles.md](tiles.md)).
+   - Tested on the Pixel Watch 5 (2 November 2026, version 23, during PR 31): both tiles and the complication worked as intended, the Status tile followed Live's link going down and coming back, and crown scrolling worked on every long screen.
 
 **M0 results (23 October 2026): complete**
 

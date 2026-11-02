@@ -437,7 +437,7 @@ class SpikeService : Service() {
         }
 
         override fun onBattery(millivolts: Int) {
-            Glances.radioBattery(this@SpikeService, millivolts)
+            address?.let { Glances.radioBattery(this@SpikeService, it, millivolts) }
             if (millivolts > 0) SpikeLog.log("Radio battery: $millivolts mV")
             SpikeLog.log("M0: watch battery ${watchBattery()}%")
             SpikeState.update { it.copy(radioMillivolts = millivolts.takeIf { mv -> mv > 0 }) }

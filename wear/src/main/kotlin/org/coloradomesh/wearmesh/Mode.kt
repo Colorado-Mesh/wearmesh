@@ -67,9 +67,9 @@ object Mode {
         Prefs.of(context).edit().remove(Prefs.QUIT).apply()
         val kind = get(context)
         SpikeLog.log("Opened after Quit: back to ${if (kind == Kind.LIVE) "Live" else "Check-in"}")
-        // The tiles show the mode.
-        Glances.refresh(context)
         if (kind == Kind.CHECK_IN) CheckIn.scheduleNext(context)
+        // The tiles show the mode, and the next check-in: after the alarm is set, so they read its time.
+        Glances.refresh(context)
     }
 
     fun promptDone(context: Context): Boolean = Prefs.of(context).getBoolean(Prefs.MODE_PROMPT_DONE, false)

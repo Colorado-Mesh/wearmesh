@@ -103,31 +103,30 @@ object Glances {
     /**
      * Keeps the radio's battery reading for the Status tile, and redraws that tile when the
      * figure it shows changes (or the last reading had grown too old to show). A reading of 0,
-     * from a radio that cannot measure its battery, clears it. Live reads the
+     * from a radio that cannot measure its battery, clears it. Only for [radio], and only while
+     * it is the one in use, so a check-in that ends after another is chosen saves nothing. Live reads the
      * battery every few minutes and the figure moves rarely, so redraws are rare. Cheap enough
      * for the protocol's callback: a settings write that does not wait for the disk, and a
      * request Wear OS handles later.
      */
-    fun radioBattery(context: Context, millivolts: Int) {
-        val prefs = Prefs.of(context)
-        if (millivolts <= 0) {
-            // The radio cannot measure it: forget an earlier reading, rather than show it for
-            // hours. Only a change redraws, so a radio that never measures costs nothing.
-            if (prefs.contains(Prefs.RADIO_MILLIVOLTS)) {
-                prefs.edit().remove(Prefs.RADIO_MILLIVOLTS).remove(Prefs.RADIO_MILLIVOLTS_AT).apply()
-                requestTile(context.applicationContext, WearMeshStatusTileService::class.java)
-            }
-            return
-        }
+    fun radioBattery(context: Context, radio: String, millivolts: Int) {
+        var changed = false
         val now = System.currentTimeMillis()
-        val before = prefs.getLong(Prefs.RADIO_MILLIVOLTS_AT, 0)
-            .takeIf { now - it in 0 until Status.BATTERY_FRESH_MS }
-            ?.let { RadioBattery.percent(prefs.getInt(Prefs.RADIO_MILLIVOLTS, 0)) }
-        prefs.edit()
-            .putInt(Prefs.RADIO_MILLIVOLTS, millivolts)
-            .putLong(Prefs.RADIO_MILLIVOLTS_AT, now)
-            .apply()
-        if (RadioBattery.percent(millivolts) != before) requestTile(context.applicationContext, WearMeshStatusTileService::class.java)
+        Prefs.writeForRadio(context, radio) { prefs, edit ->
+            if (millivolts <= 0) {
+                // The radio cannot measure it: forget an earlier reading, rather than show it for
+                // hours. Only a change redraws, so a radio that never measures costs nothing.
+                changed = prefs.contains(Prefs.RADIO_MILLIVOLTS)
+                edit.remove(Prefs.RADIO_MILLIVOLTS).remove(Prefs.RADIO_MILLIVOLTS_AT)
+            } else {
+                val before = prefs.getLong(Prefs.RADIO_MILLIVOLTS_AT, 0)
+                    .takeIf { now - it in 0 until Status.BATTERY_FRESH_MS }
+                    ?.let { RadioBattery.percent(prefs.getInt(Prefs.RADIO_MILLIVOLTS, 0)) }
+                edit.putInt(Prefs.RADIO_MILLIVOLTS, millivolts).putLong(Prefs.RADIO_MILLIVOLTS_AT, now)
+                changed = RadioBattery.percent(millivolts) != before
+            }
+        }
+        if (changed) requestTile(context.applicationContext, WearMeshStatusTileService::class.java)
     }
 
     /**

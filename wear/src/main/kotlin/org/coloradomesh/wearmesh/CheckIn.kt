@@ -71,6 +71,8 @@ object CheckIn {
         val delay = delayMs ?: (intervalMinutes(context) * 60_000L)
         if (!exactAlarmsAllowed(context)) {
             SpikeLog.log("Check-in: not scheduled, \"Alarms & reminders\" is not allowed for WearMesh")
+            // Android cancels exact alarms when the permission is taken away: no next time to show.
+            Prefs.of(context).edit().remove(Prefs.NEXT_CHECK_IN_AT).apply()
             return
         }
         alarms(context).setExactAndAllowWhileIdle(
