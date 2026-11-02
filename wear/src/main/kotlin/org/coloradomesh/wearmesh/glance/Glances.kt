@@ -70,6 +70,9 @@ object Glances {
         requestTile(app, WearMeshStatusTileService::class.java)
     }
 
+    /** Asks Wear OS to draw the Status tile again, as when the next check-in's time changes. */
+    fun refreshStatus(context: Context) = requestTile(context.applicationContext, WearMeshStatusTileService::class.java)
+
     private fun requestTile(app: Context, tile: Class<out TileService>) {
         try {
             TileService.getUpdater(app).requestUpdate(tile)

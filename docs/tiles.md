@@ -27,7 +27,7 @@ The radio's battery is the last reading, from Live or a check-in, and is left ou
 
 ## Battery
 
-Neither tile has a timer: times are clock times, and both are redrawn only when the app asks, after each sync, each read, each change of mode, of radio and of Live's link, and when the Check-in alarm is set again after a restart or an update. The Status tile is also redrawn when the radio's battery figure changes, or the radio reports it cannot measure it (the reading is then cleared). Choosing another radio, or forgetting the one in use, clears its battery reading and a failed try, and a check-in of the old radio that ends after the change saves nothing, so they never show under another radio. They read what the app has saved and never wake the radio.
+Neither tile has a timer: times are clock times, and both are redrawn only when the app asks, after each sync, each read, each change of mode, of radio and of Live's link, and whenever the Check-in alarm is set or cancelled (a check-in, a change of interval in Settings, Quit, a restart or an update). The Status tile is also redrawn when the radio's battery figure changes, or the radio reports it cannot measure it (the reading is then cleared). Choosing another radio, or forgetting the one in use, clears its battery reading and a failed try, and a check-in of the old radio that ends after the change saves nothing, so they never show under another radio. They read what the app has saved and never wake the radio.
 
 ## Testing on the watch
 
