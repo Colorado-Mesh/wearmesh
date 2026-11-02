@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import android.view.HapticFeedbackConstants
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -548,6 +549,8 @@ class MainActivity : ComponentActivity() {
                     onSend = { body ->
                         withPermissions {
                             Outbox.send(this@MainActivity, key, body)
+                            // A tick to say it is on its way (the design's haptic on send).
+                            window.decorView.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
                             nav.popBackStack()
                         }
                     },
