@@ -30,6 +30,17 @@ jobs:
         with:
           submodules: true
           persist-credentials: false
+          # The whole history, to check the tag is on main.
+          fetch-depth: 0
+
+      - name: Check the tag is on main
+        shell: bash
+        run: |
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" FETCH_HEAD; then
+            echo "::error title=Not on main::The tag ${GITHUB_REF_NAME} is on a commit that is not on main. Release only from main, after the release's pull request is merged."
+            exit 1
+          fi
 
       - name: Check the tag matches the version
         shell: bash
@@ -44,8 +55,13 @@ jobs:
           case "$version" in
             *-dev) echo "::error title=Development version::$version is a development version; set the release's version first."; exit 1 ;;
           esac
-          if ! grep -q "^## ${version}\b" CHANGELOG.md; then
+          heading=$(grep -E "^## ${version//./\\.}( |$)" CHANGELOG.md | head -n 1)
+          if [ -z "$heading" ]; then
             echo "::error title=No changelog::CHANGELOG.md has no \"## $version\" section."
+            exit 1
+          fi
+          if printf '%s' "$heading" | grep -qi "not yet released"; then
+            echo "::error title=Changelog not dated::CHANGELOG.md still says \"$heading\". Give the section its release date first, as \"## $version (12 November 2026)\"."
             exit 1
           fi
           echo "VERSION=$version" >> "$GITHUB_ENV"
@@ -90,12 +106,23 @@ jobs:
 
       - name: Check the APK is signed with the release key
         shell: bash
+        env:
+          # The release certificate's SHA-256 fingerprint, a variable of the release environment:
+          # an APK signed with any other key could not update testers' installs.
+          EXPECTED_SHA256: ${{ vars.WEARMESH_CERT_SHA256 }}
         run: |
+          expected=$(printf '%s' "$EXPECTED_SHA256" | tr -d ': ' | tr '[:upper:]' '[:lower:]')
+          if [ -z "$expected" ]; then
+            echo "::error title=No fingerprint::The release environment has no WEARMESH_CERT_SHA256 variable (docs/releasing.md)."
+            exit 1
+          fi
           # The newest build tools on the runner.
           apksigner=$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -name apksigner | sort -V | tail -n 1)
           "$apksigner" verify --print-certs wear/build/outputs/apk/release/wear-release.apk | tee signature.txt
-          if grep -qi "CN=Android Debug" signature.txt; then
-            echo "::error title=Debug key::The APK is signed with a debug key, not the release key."
+          # One signer, and it is the release key.
+          digests=$(sed -n 's/^Signer #[0-9]* certificate SHA-256 digest: *//p' signature.txt | tr '[:upper:]' '[:lower:]')
+          if [ "$digests" != "$expected" ]; then
+            echo "::error title=Wrong key::The APK is not signed with the release key alone (signer digests: ${digests:-none}; expected $expected)."
             exit 1
           fi
           mkdir -p out
@@ -107,6 +134,15 @@ jobs:
         if: always()
         shell: bash
         run: rm -f "$RUNNER_TEMP/wearmesh-release.jks"
+
+      # Before publishing, so a failed upload leaves no release without its AAB.
+      - name: Keep the AAB for Google Play
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wearmesh-${{ env.VERSION }}-aab
+          path: out/wearmesh-${{ env.VERSION }}.aab
+          if-no-files-found: error
+          retention-days: 90
 
       - name: Publish the GitHub Release
         shell: bash
@@ -130,10 +166,3 @@ jobs:
             "out/wearmesh-${VERSION}.apk" "out/wearmesh-${VERSION}.apk.sha256" \
             --repo "$GITHUB_REPOSITORY" --title "WearMesh ${VERSION}" --notes-file notes.md $prerelease
 
-      - name: Keep the AAB for Google Play
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: wearmesh-${{ env.VERSION }}-aab
-          path: out/wearmesh-${{ env.VERSION }}.aab
-          if-no-files-found: error
-          retention-days: 90

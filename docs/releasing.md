@@ -46,6 +46,15 @@ The key never goes in the repository (`.gitignore` refuses `*.jks`, `*.keystore`
    | `WEARMESH_KEY_ALIAS` | `wearmesh` |
    | `WEARMESH_KEY_PASSWORD` | The same password |
 
+   And one environment **variable** (not a secret: it is public), `WEARMESH_CERT_SHA256`, the
+   key's SHA-256 fingerprint as `keytool -list -v -keystore ~/keys/wearmesh-release.jks` shows
+   it (colons and capitals are fine). The workflow refuses an APK signed with any other key,
+   since it could not update testers' installs:
+
+   ```bash
+   gh variable set WEARMESH_CERT_SHA256 --env release --repo Colorado-Mesh/wearmesh --body "<the SHA256 fingerprint>"
+   ```
+
    Only the Release workflow uses the environment, and only for a `v*` tag, so pull requests and
    forks never see the key. Then, in Settings › Rules, add a tag ruleset for `v*` that only you
    can create, update or delete.
@@ -64,13 +73,14 @@ The key never goes in the repository (`.gitignore` refuses `*.jks`, `*.keystore`
    ```
 
 3. **The Release workflow** (`.github/workflows/release.yml`) then:
-   - stops if the tag is not `v` + `versionName`, if the version ends in `-dev`, or if
-     `CHANGELOG.md` has no section for it;
+   - stops if the tagged commit is not on `main`, if the tag is not `v` + `versionName`, if the
+     version ends in `-dev`, or if `CHANGELOG.md` has no section for it or the section is still
+     "not yet released";
    - runs the tests and builds the APK and the AAB, signed with the release key;
-   - checks the APK is signed with that key and not a debug key;
-   - publishes the GitHub Release `WearMesh 0.1.0`, with the changelog section as its notes, the
-     APK as `wearmesh-0.1.0.apk` and its SHA-256;
-   - keeps the AAB, for Google Play, as a workflow artifact for 90 days.
+   - checks the APK is signed with that key alone, by its fingerprint;
+   - keeps the AAB, for Google Play, as a workflow artifact for 90 days;
+   - only then publishes the GitHub Release `WearMesh 0.1.0`, with the changelog section as its notes, the
+     APK as `wearmesh-0.1.0.apk` and its SHA-256.
 4. **Open the next version** in a pull request: `versionName` to `0.2.0-dev`, `versionCode` up by
    one, and a `## 0.2.0 (not yet released)` section at the top of `CHANGELOG.md`.
 
