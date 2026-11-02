@@ -224,6 +224,26 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Deletes a direct conversation's messages (decided 1 November 2026): its notification and any
+     * failure notifications go too; the contact stays, on the radio and on the watch.
+     */
+    private fun deleteConversation(radio: String, conversation: String) {
+        if (radio.isEmpty()) return
+        val app = applicationContext
+        val store = Storage.store(app, radio)
+        Notifier.dismiss(app, radio, conversation)
+        Storage.later {
+            val failed = store.deleteConversation(conversation)
+            // Again once the messages are gone: a sync queued before this could have posted it anew.
+            Notifier.dismiss(app, radio, conversation)
+            for (id in failed) Notifier.dismissFailure(app, radio, id)
+            SpikeLog.log("Conversation $conversation deleted")
+            Storage.refreshCounts(app)
+            Glances.refresh(app)
+        }
+    }
+
     private fun hasBluetoothPermission(): Boolean =
         listOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT).all {
             ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
@@ -483,6 +503,27 @@ class MainActivity : ComponentActivity() {
                     },
                     onReply = { nav.navigate(replyRoute(key, title, null)) },
                     onOpenMessage = { message -> nav.navigate("$MESSAGE/${message.id}/${Uri.encode(title)}") },
+                    onDelete = if (key.startsWith("d:")) {
+                        { nav.navigate("$CONFIRM_DELETE/${Uri.encode(key)}/${Uri.encode(title)}") }
+                    } else {
+                        null
+                    },
+                )
+            }
+
+            composable("$CONFIRM_DELETE/{key}/{title}") { entry ->
+                val key = entry.arguments?.getString("key").orEmpty()
+                val title = entry.arguments?.getString("title").orEmpty()
+                ConfirmScreen(
+                    title = "Delete conversation with $title?",
+                    explanation = "Its messages are deleted from the watch, also any waiting to send. " +
+                        "The contact stays, on the radio and on the watch.",
+                    action = "Delete",
+                    onConfirm = {
+                        deleteConversation(radioInUse, key)
+                        nav.popBackStack(HOME, inclusive = false)
+                    },
+                    onCancel = { nav.popBackStack() },
                 )
             }
 
@@ -748,6 +789,7 @@ class MainActivity : ComponentActivity() {
         const val RADIO = "radio"
         const val FIND = "find"
         const val CONFIRM_FORGET = "confirm-forget"
+        const val CONFIRM_DELETE = "confirm-delete"
         const val FORGOTTEN = "forgotten"
         const val SETTINGS = "settings"
         const val DIAGNOSTICS = "diagnostics"

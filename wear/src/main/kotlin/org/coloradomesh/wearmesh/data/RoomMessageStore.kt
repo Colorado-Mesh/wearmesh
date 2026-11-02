@@ -17,6 +17,7 @@ class RoomMessageStore(private val db: WearMeshDatabase, override val address: S
             dao.clearMessages(address)
             dao.clearChannels(address)
             dao.clearContacts(address)
+            dao.clearKeptContacts(address)
             dao.clearRadio(address)
         },
     )
@@ -41,6 +42,16 @@ class RoomMessageStore(private val db: WearMeshDatabase, override val address: S
     )
 
     override fun favouriteNames(): List<String> = dao.favouriteNames(address)
+
+    override fun deleteConversation(conversation: String): List<Long> = db.runInTransaction(
+        Callable {
+            val failed = dao.failedIn(address, conversation)
+            // By prefix, so it counts even if the contact has not been read from the radio yet.
+            if (conversation.startsWith("d:")) dao.keepContact(KeptContactRow(address, conversation.removePrefix("d:").lowercase()))
+            dao.deleteConversation(address, conversation)
+            failed
+        },
+    )
 
     override fun directContacts(): List<KeptContact> =
         dao.directContacts(address).map { KeptContact(it.publicKey, it.name, it.type, it.lastAdvert) }
@@ -121,7 +132,7 @@ class RoomMessageStore(private val db: WearMeshDatabase, override val address: S
     override fun pendingOutgoing(): List<OutgoingMessage> =
         dao.pendingOutgoing(address).map { OutgoingMessage(it.id, it.conversation, it.body, it.receivedAt) }
 
-    override fun setOutgoingStatus(id: Long, status: OutgoingStatus) = dao.setStatus(address, id, status.name)
+    override fun setOutgoingStatus(id: Long, status: OutgoingStatus): Boolean = dao.setStatus(address, id, status.name) > 0
 
     override fun retryOutgoing(id: Long, at: Long): Boolean = dao.retry(address, id, at) > 0
 

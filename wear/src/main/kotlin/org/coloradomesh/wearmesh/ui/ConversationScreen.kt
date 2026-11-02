@@ -44,6 +44,8 @@ fun ConversationScreen(
     onReply: () -> Unit,
     /** A tapped message: to reply to its sender, or retry one of the watch's that failed. */
     onOpenMessage: (MessageRow) -> Unit,
+    /** For a direct conversation: Delete conversation, at the bottom (decided 1 November 2026). */
+    onDelete: (() -> Unit)? = null,
 ) {
     val state = rememberScalingLazyListState()
     var placed by remember { mutableStateOf(false) }
@@ -68,6 +70,7 @@ fun ConversationScreen(
                 secondary = true,
             ) { onToggleNotify() }
         }
+        if (onDelete != null && messages.isNotEmpty()) item { WideChip("Delete conversation", secondary = true) { onDelete() } }
     }
 }
 

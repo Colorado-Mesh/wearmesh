@@ -12,8 +12,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * later version can be checked against it and given a migration.
  */
 @Database(
-    entities = [RadioRow::class, ChannelRow::class, ContactRow::class, MessageRow::class],
-    version = 5,
+    entities = [RadioRow::class, ChannelRow::class, ContactRow::class, MessageRow::class, KeptContactRow::class],
+    version = 6,
     exportSchema = true,
 )
 abstract class WearMeshDatabase : RoomDatabase() {
@@ -48,12 +48,22 @@ abstract class WearMeshDatabase : RoomDatabase() {
             }
         }
 
+        /** Version 6 keeps the contacts whose direct-message conversation was deleted, as people the user messages. */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `kept_contacts` (`radio` TEXT NOT NULL, `prefix` TEXT NOT NULL, " +
+                        "PRIMARY KEY(`radio`, `prefix`))",
+                )
+            }
+        }
+
         @Volatile
         private var instance: WearMeshDatabase? = null
 
         fun get(context: Context): WearMeshDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, WearMeshDatabase::class.java, FILE)
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 // Only for a version with no migration (1, from before per-radio history): the
                 // store starts afresh, and the radio's queue and the next full read refill it.
                 .fallbackToDestructiveMigration()

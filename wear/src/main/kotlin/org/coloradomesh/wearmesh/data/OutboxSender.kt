@@ -247,8 +247,25 @@ class OutboxSender(
     fun onContactSaved(publicKeyHex: String, saved: Boolean, errorCode: Int?) {
         val group = synchronized(lock) { awaitingSave.remove(publicKeyHex) } ?: return
         when {
-            // Off the link's thread, as every hand-over is.
-            saved -> writer.execute { group.forEach { handOver(it) } }
+            // Off the link's thread, as every hand-over is; only those still waiting (a deleted
+            // conversation takes its messages with it).
+            saved -> writer.execute {
+                val waiting = try {
+                    store.pendingOutgoing().map { it.id }.toSet()
+                } catch (e: Exception) {
+                    log("Outbox: could not read the messages to send (${e.message})")
+                    emptySet()
+                }
+                for (message in group) {
+                    if (message.id in waiting) {
+                        handOver(message)
+                    } else {
+                        // Deleted with its conversation: its place goes to any message held back.
+                        synchronized(lock) { inFlight.remove(message.id) }
+                        released()
+                    }
+                }
+            }
             errorCode != null -> for (message in group) {
                 end(message, OutgoingStatus.NO_CONTACT, "the radio would not take the contact back (error $errorCode)")
             }
@@ -287,6 +304,11 @@ class OutboxSender(
     private fun end(message: OutgoingMessage, status: OutgoingStatus, why: String?) {
         synchronized(lock) { inFlight.remove(message.id) }
         record(message, status, why)
+        released()
+    }
+
+    /** A place with the radio has come free: messages held back for want of one go now. */
+    private fun released() {
         val again = synchronized(lock) {
             (more && !finished).also {
                 if (it) {
@@ -306,14 +328,15 @@ class OutboxSender(
             "Message on channel ${message.conversation.removePrefix("c:")}"
         log("Outbox: $what ${describe(status)}" + (why?.let { ": $it" } ?: ""))
         writer.execute {
-            try {
+            val recorded = try {
                 store.setOutgoingStatus(message.id, status)
             } catch (e: Exception) {
                 log("Outbox: could not record a message's status (${e.message})")
                 // Not recorded as failed, so Retry could not find it: no notification offering it.
                 return@execute
             }
-            if (status == OutgoingStatus.FAILED || status == OutgoingStatus.NO_CONTACT) {
+            // Not for a message deleted meanwhile, with its conversation: no notification of it.
+            if (recorded && (status == OutgoingStatus.FAILED || status == OutgoingStatus.NO_CONTACT)) {
                 try {
                     onFailed(message, status, why)
                 } catch (e: Exception) {

@@ -92,3 +92,16 @@ data class ConversationLast(
     /** Whether the newest message is one this watch sent. */
     val outgoing: Boolean = false,
 )
+
+/**
+ * A contact whose direct-message conversation the user deleted, still counted as someone they
+ * message (decided 1 November 2026), so Keep contacts on radio can still keep them on the radio
+ * (schema version 6). A table of its own, since saving contacts from the radio replaces their rows.
+ * Keyed by prefix, as conversations are, so one deleted before its contact was read still counts.
+ */
+@Entity(tableName = "kept_contacts", primaryKeys = ["radio", "prefix"])
+data class KeptContactRow(
+    val radio: String,
+    /** The conversation's key prefix: all a direct message gives, so it is kept even before the contact is read. */
+    val prefix: String,
+)

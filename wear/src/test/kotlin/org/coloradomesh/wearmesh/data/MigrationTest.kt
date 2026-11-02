@@ -73,7 +73,7 @@ class MigrationTest {
             close()
         }
         val opened = Room.databaseBuilder(context, WearMeshDatabase::class.java, name)
-            .addMigrations(WearMeshDatabase.MIGRATION_2_3, WearMeshDatabase.MIGRATION_3_4, WearMeshDatabase.MIGRATION_4_5)
+            .addMigrations(WearMeshDatabase.MIGRATION_2_3, WearMeshDatabase.MIGRATION_3_4, WearMeshDatabase.MIGRATION_4_5, WearMeshDatabase.MIGRATION_5_6)
             .allowMainThreadQueries()
             .build()
         db = opened
@@ -98,7 +98,7 @@ class MigrationTest {
             close()
         }
         val opened = Room.databaseBuilder(context, WearMeshDatabase::class.java, name)
-            .addMigrations(WearMeshDatabase.MIGRATION_2_3, WearMeshDatabase.MIGRATION_3_4, WearMeshDatabase.MIGRATION_4_5)
+            .addMigrations(WearMeshDatabase.MIGRATION_2_3, WearMeshDatabase.MIGRATION_3_4, WearMeshDatabase.MIGRATION_4_5, WearMeshDatabase.MIGRATION_5_6)
             .allowMainThreadQueries()
             .build()
         db = opened
@@ -117,7 +117,7 @@ class MigrationTest {
             close()
         }
         val opened = Room.databaseBuilder(context, WearMeshDatabase::class.java, name)
-            .addMigrations(WearMeshDatabase.MIGRATION_2_3, WearMeshDatabase.MIGRATION_3_4, WearMeshDatabase.MIGRATION_4_5)
+            .addMigrations(WearMeshDatabase.MIGRATION_2_3, WearMeshDatabase.MIGRATION_3_4, WearMeshDatabase.MIGRATION_4_5, WearMeshDatabase.MIGRATION_5_6)
             .allowMainThreadQueries()
             .build()
         db = opened
@@ -132,5 +132,28 @@ class MigrationTest {
         val heard = opened.dao().messages("F3:9E:35:24:99:76", "c:0").last()
         assertEquals(6.25, heard.snr!!, 1e-9)
         assertEquals(3, heard.hops)
+    }
+
+    @Test
+    fun version5KeepsItsContactsAndGainsKeptContacts() {
+        createFromSchema(5).apply {
+            execSQL(
+                "INSERT INTO contacts (radio, public_key, prefix, name, type, last_advert, seen_at, favourite) " +
+                    "VALUES ('F3:9E:35:24:99:76', '${"b".repeat(64)}', 'bbbbbbbbbbbb', 'Bo', 1, 1700000000, 1800000000000, 0)",
+            )
+            execSQL(
+                "INSERT INTO messages (radio, conversation, sender, body, sent_at, received_at, read, outgoing) " +
+                    "VALUES ('F3:9E:35:24:99:76', 'd:bbbbbbbbbbbb', '', 'hi', 1700000900, 1800000000000, 1, 0)",
+            )
+            close()
+        }
+        val opened = Room.databaseBuilder(context, WearMeshDatabase::class.java, name)
+            .addMigrations(WearMeshDatabase.MIGRATION_2_3, WearMeshDatabase.MIGRATION_3_4, WearMeshDatabase.MIGRATION_4_5, WearMeshDatabase.MIGRATION_5_6)
+            .allowMainThreadQueries()
+            .build()
+        db = opened
+        val store = RoomMessageStore(opened, "F3:9E:35:24:99:76")
+        store.deleteConversation("d:bbbbbbbbbbbb")
+        assertEquals(listOf("Bo"), store.directContacts().map { it.name })
     }
 }

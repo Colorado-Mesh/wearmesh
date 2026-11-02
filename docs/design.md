@@ -129,7 +129,7 @@ The app has three screens and two glanceable surfaces, built for one-handed use 
 
 The radio is the source of truth for channels; the watch keeps only a small message history it has already pulled.
 
-- **Room database** with four tables: radio (address, name, self info, last sync), channel (index, name, mute, unread count), contact (key prefix, name, unread count), message (channel index or contact, sender, text, timestamp, SNR, direction, send status).
+- **Room database** with five tables (schema version 6): radios (address, sync state), channels (slot, name, kind), contacts (key, key prefix, name, type, last advert, when seen, favourite), messages (conversation, sender, text, sent and received times, read, direction, send status, SNR, hops), and kept_contacts (the key prefixes of people whose direct conversation was deleted, still counted as people you message).
 - **Retention:** keep the last N messages per channel (for example 200) and prune older ones; history once drained from the radio exists only on the watch.
 - **Channel secrets** are not needed on the watch to send or receive: the radio does the crypto. The app stores names and indexes only, never keys.
 - **Settings** (connection mode, interval, quick replies, vibration) in DataStore.
@@ -155,6 +155,7 @@ The biggest unknown is BLE behavior on the Pixel Watch 5, tested in the first mi
 - [x] Target watch: Pixel Watch 5 first.
 - [x] Dictation: works offline on the Pixel Watch 5 (M0); it needs a confirmation tap before the text is returned.
 - [x] Direct messages to known contacts are in v1.
+- [x] Deleting a direct conversation (decided 1 November 2026): Delete conversation at the bottom of a direct conversation's screen, after a confirm screen. Its messages go, also any waiting to send, with its notifications. The contact stays, on the radio and on the watch, still counted as someone you message, so Keep contacts on radio keeps it (schema version 6, table `kept_contacts`). Channels cannot be deleted: they are the radio's.
 - [x] Signal and hops (decided 1 November 2026): the message screen (tap a message) shows how a received message reached the radio, such as "SNR 6.5 dB · 3 hops": the SNR of the last hop the radio heard it on, and for a flooded message the repeaters it passed through ("no repeaters" when heard from the sender). A message that came along a known route has no hop count, so none is shown; older firmware gives no SNR, but still the hop count, so its line is the hops alone ("2 hops"). The conversation list is unchanged. Stored from schema version 5; messages from before have none.
 - [x] Contacts you message are kept on the radio (decided 1 November 2026), behind Settings › Keep contacts on radio, off by default: each is made a favourite there, and one the radio drops is put back from the watch's copy, after each full read and when a direct message to it is refused ([keeping-contacts.md](keeping-contacts.md)). This saves contacts to the radio, which the non-goals otherwise leave to the phone, but only ones the radio already had.
 - [x] Repository: wearmesh, within Colorado Mesh, same licensing as MeshCore TAK Bridge.

@@ -21,6 +21,14 @@ private const val LAST_MESSAGES =
         "m.outgoing AS outgoing " +
         "FROM messages m WHERE m.id IN (SELECT MAX(id) FROM messages WHERE radio = :radio GROUP BY conversation)"
 
+/**
+ * A contact [c] the user messages: one with a direct-message conversation, or one whose
+ * conversation they deleted (kept_contacts).
+ */
+private const val MESSAGED =
+    "(EXISTS (SELECT 1 FROM messages m WHERE m.radio = c.radio AND m.conversation = 'd:' || c.prefix) " +
+        "OR EXISTS (SELECT 1 FROM kept_contacts k WHERE k.radio = c.radio AND k.prefix = c.prefix))"
+
 @Dao
 interface StoreDao {
     @Query("SELECT * FROM radios WHERE address = :radio")
@@ -42,7 +50,8 @@ interface StoreDao {
     /** Keeps those with a direct-message conversation, so the watch can put them back on the radio. */
     @Query(
         "DELETE FROM contacts WHERE radio = :radio AND seen_at < :readAt AND NOT EXISTS " +
-            "(SELECT 1 FROM messages m WHERE m.radio = contacts.radio AND m.conversation = 'd:' || contacts.prefix)",
+            "(SELECT 1 FROM messages m WHERE m.radio = contacts.radio AND m.conversation = 'd:' || contacts.prefix) AND NOT EXISTS " +
+            "(SELECT 1 FROM kept_contacts k WHERE k.radio = contacts.radio AND k.prefix = contacts.prefix)",
     )
     fun dropContactsNotSeenSince(radio: String, readAt: Long)
 
@@ -55,8 +64,7 @@ interface StoreDao {
 
     /** Contacts with a direct-message conversation (decided 1 November 2026: each is kept on the radio as a favourite). */
     @Query(
-        "SELECT * FROM contacts c WHERE c.radio = :radio AND EXISTS " +
-            "(SELECT 1 FROM messages m WHERE m.radio = c.radio AND m.conversation = 'd:' || c.prefix) ORDER BY c.name",
+        "SELECT * FROM contacts c WHERE c.radio = :radio AND " + MESSAGED + " ORDER BY c.name",
     )
     fun directContacts(radio: String): List<ContactRow>
 
@@ -65,8 +73,7 @@ interface StoreDao {
      * and nodes with a direct-message conversation. Read before they are dropped, for the log.
      */
     @Query(
-        "SELECT * FROM contacts c WHERE c.radio = :radio AND c.seen_at < :readAt AND (c.favourite = 1 OR EXISTS " +
-            "(SELECT 1 FROM messages m WHERE m.radio = c.radio AND m.conversation = 'd:' || c.prefix))",
+        "SELECT * FROM contacts c WHERE c.radio = :radio AND c.seen_at < :readAt AND (c.favourite = 1 OR " + MESSAGED + ")",
     )
     fun notableNotSeenSince(radio: String, readAt: Long): List<ContactRow>
 
@@ -149,7 +156,7 @@ interface StoreDao {
     fun pendingCount(radio: String, conversation: String): Int
 
     @Query("UPDATE messages SET status = :status WHERE radio = :radio AND id = :id AND outgoing = 1")
-    fun setStatus(radio: String, id: Long, status: String)
+    fun setStatus(radio: String, id: Long, status: String): Int
 
     /** A failed message waits to send again, as if written at [at]; returns the rows changed. */
     @Query(
@@ -190,6 +197,19 @@ interface StoreDao {
 
     @Query("DELETE FROM contacts WHERE radio = :radio")
     fun clearContacts(radio: String)
+
+    @Query("DELETE FROM kept_contacts WHERE radio = :radio")
+    fun clearKeptContacts(radio: String)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    fun keepContact(row: KeptContactRow)
+
+    /** The watch's messages in [conversation] that failed: their notifications go with it. */
+    @Query("SELECT id FROM messages WHERE radio = :radio AND conversation = :conversation AND outgoing = 1 AND status IN ('FAILED', 'NO_CONTACT')")
+    fun failedIn(radio: String, conversation: String): List<Long>
+
+    @Query("DELETE FROM messages WHERE radio = :radio AND conversation = :conversation")
+    fun deleteConversation(radio: String, conversation: String)
 
     @Query("DELETE FROM radios WHERE address = :radio")
     fun clearRadio(radio: String)
