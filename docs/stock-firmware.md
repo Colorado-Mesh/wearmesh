@@ -28,4 +28,16 @@ Run on the same Tag with Settings › Keep contacts on radio on (app version 21,
 | Put back | With one of them deleted from the Tag in the phone app, the next full read found it missing and put it back, as a favourite; this was done twice |
 | Refusal (error 2) | With the contact deleted again and only a brief read, a direct message to it was refused with error 2. The watch put the contact back and sent the message again, which the Tag then flooded to the mesh. It ended Not confirmed: that node did not acknowledge an earlier message either, so it was likely out of range |
 
-Still to try on stock firmware: a night in Check-in.
+## A night in Check-in, 1 to 2 November 2026
+
+The Tag in Check-in every 15 minutes, 18:44 to 07:00, wireless debugging off. Its contact list was full by the evening's first full read (346, then 350, with 7 to 8 favourites), as the T1's is.
+
+| | Result |
+| --- | --- |
+| Check-ins | 58, none failed: 50 scheduled, never more than 15.3 minutes apart, mostly with the screen off in Doze. Four needed a second connection try (status 133) |
+| Time | 7.4 s on average; full reads of the 350 contacts 21 to 24 s, the longest 27.5 s (a brief read whose connection needed 3 tries) |
+| Messages | 171 collected, 3 notifications |
+| Contacts | Keep contacts on radio made one person you message a favourite again; no one you message was dropped overnight |
+| Battery | 100% at 19:05 to 88% at 06:45: about 1.0% an hour, 0.9% from 21:29 to 05:15. The T1's night (M4 step 3) was 0.8 to 1.0% |
+
+Every check on stock firmware has now passed.
