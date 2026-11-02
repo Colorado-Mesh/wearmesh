@@ -155,10 +155,23 @@ jobs:
             on && /^## / { exit }
             on { print }
           ' CHANGELOG.md > notes.md
-          {
-            echo
-            echo "To install, with Wi-Fi debugging on in the watch's Developer options: \`adb install -r wearmesh-${VERSION}.apk\`. Check the download against the .sha256 file."
-          } >> notes.md
+          cat >> notes.md <<NOTES
+
+          ### Installing
+
+          Check the download first: \`sha256sum -c wearmesh-${VERSION}.apk.sha256\`. Then, with the
+          watch and computer on the same Wi-Fi and [adb](https://developer.android.com/tools/releases/platform-tools)
+          on the computer:
+
+          1. On the watch, turn on Settings › Developer options › Wireless debugging (tap Build number
+             seven times in Settings › System › About › Versions to show Developer options).
+          2. In Wireless debugging, tap **Pair new device**, then on the computer run
+             \`adb pair <ip>:<pairing port>\` with the code the watch shows.
+          3. Back in Wireless debugging, run \`adb connect <ip>:<port>\` with the address shown there.
+          4. Run \`adb install -r wearmesh-${VERSION}.apk\`.
+
+          Turn Wireless debugging off afterwards: it roughly doubles the watch's battery drain.
+          NOTES
           # Versions before 1.0 are marked as pre-releases.
           prerelease=""
           case "$VERSION" in 0.*) prerelease="--prerelease" ;; esac
