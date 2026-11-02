@@ -34,13 +34,22 @@ jobs:
           # The open-source cache, a thin wrapper over actions/cache.
           cache-provider: basic
 
+      # Robolectric fetches Android's jars for the database tests itself, outside Gradle and
+      # its cache, so they are kept between runs here instead of downloaded every time.
+      - name: Cache Robolectric's Android jars
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: robolectric-${{ hashFiles('gradle/libs.versions.toml') }}
+          restore-keys: robolectric-
+
       # The release variant is built too, unsigned, so problems that only a release build shows
       # (such as Android's release lint checks) turn up here rather than at release time.
       - name: Run tests and build the app
         shell: bash
-        run: |
-          set -o pipefail
-          ./gradlew test assembleDebug assembleRelease --continue 2>&1 | tee build.log
+        # Tried a second time if a download fails, as Maven Central sometimes refuses with "429
+        # Too Many Requests"; the script writes build.log for the summary below.
+        run: .github/scripts/gradle-retry.sh test assembleDebug assembleRelease --continue
 
       # Puts the failing lines on the run's summary page, where they can be read without
       # opening the full log.
