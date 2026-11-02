@@ -56,6 +56,39 @@ object Prefs {
      */
     const val KEEP_CONTACTS = "keep_contacts"
 
+    /** When the next check-in alarm is due, by the watch's clock; unset when none is set. For the Status tile. */
+    const val NEXT_CHECK_IN_AT = "next_check_in_at"
+
+    /** The radio's last battery reading in millivolts, and when it came (watch clock); for the Status tile. */
+    const val RADIO_MILLIVOLTS = "radio_millivolts"
+    const val RADIO_MILLIVOLTS_AT = "radio_millivolts_at"
+
+    /** Why the last sync failed; removed when one works. For the Status tile. */
+    const val LAST_PROBLEM = "last_problem"
+
+    /**
+     * Held while the radio in use changes ([org.coloradomesh.wearmesh.Radios]) and by
+     * [writeForRadio], so a sync of one radio that ends after another is chosen saves nothing
+     * under the new one.
+     */
+    val RADIO_LOCK = Any()
+
+    /**
+     * Applies [write] only if [radio] is still the one in use, checked and written under
+     * [RADIO_LOCK]. Returns whether it wrote. `apply` updates the settings at once (the disk
+     * later), so the next check sees it.
+     */
+    fun writeForRadio(context: Context, radio: String, write: (SharedPreferences, SharedPreferences.Editor) -> Unit): Boolean {
+        val prefs = of(context)
+        synchronized(RADIO_LOCK) {
+            if (prefs.getString(RADIO_ADDRESS, null) != radio) return false
+            val edit = prefs.edit()
+            write(prefs, edit)
+            edit.apply()
+            return true
+        }
+    }
+
     fun of(context: Context): SharedPreferences =
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 }

@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.SystemClock
+import org.coloradomesh.wearmesh.glance.Glances
 
 /**
  * Schedules Check-in on exact alarms, and runs one on request.
@@ -56,7 +57,11 @@ object CheckIn {
     }
 
     /** Cancels the next check-in without turning Check-in off, for Quit. */
-    fun cancelAlarm(context: Context) = alarms(context).cancel(alarmIntent(context))
+    fun cancelAlarm(context: Context) {
+        alarms(context).cancel(alarmIntent(context))
+        Prefs.of(context).edit().remove(Prefs.NEXT_CHECK_IN_AT).apply()
+        Glances.refreshStatus(context)
+    }
 
     /**
      * Sets the next alarm, replacing any already set. Called by each alarm, after a restart or an
@@ -68,6 +73,9 @@ object CheckIn {
         val delay = delayMs ?: (intervalMinutes(context) * 60_000L)
         if (!exactAlarmsAllowed(context)) {
             SpikeLog.log("Check-in: not scheduled, \"Alarms & reminders\" is not allowed for WearMesh")
+            // Android cancels exact alarms when the permission is taken away: no next time to show.
+            Prefs.of(context).edit().remove(Prefs.NEXT_CHECK_IN_AT).apply()
+            Glances.refreshStatus(context)
             return
         }
         alarms(context).setExactAndAllowWhileIdle(
@@ -75,7 +83,11 @@ object CheckIn {
             SystemClock.elapsedRealtime() + delay,
             alarmIntent(context),
         )
-        SpikeLog.log("Check-in: next at ${SpikeLog.clock(System.currentTimeMillis() + delay)}")
+        val at = System.currentTimeMillis() + delay
+        Prefs.of(context).edit().putLong(Prefs.NEXT_CHECK_IN_AT, at).apply()
+        // The Status tile shows this time, whoever set the alarm: Settings, a check-in, a restart.
+        Glances.refreshStatus(context)
+        SpikeLog.log("Check-in: next at ${SpikeLog.clock(at)}")
     }
 
     /** Why a check-in runs when Check now is tapped: a brief read, like a scheduled one. */

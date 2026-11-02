@@ -144,7 +144,7 @@ object CheckInRun {
         try {
             problem = connectAndCollect(app, address, fullRead, started, timeLimitMs, sendLimitMs)
         } finally {
-            SyncStatus.finished(app, problem)
+            SyncStatus.finished(app, address, problem)
             // After the sync time is saved, so "Synced … ago" counts from this one.
             Glances.refresh(app)
         }
@@ -238,6 +238,9 @@ object CheckInRun {
             override fun onRadioClock(radioSeconds: Long, clientSeconds: Long, setting: Boolean) {
                 RadioClock.describe(radioSeconds, clientSeconds, setting)?.let { SpikeLog.log("Check-in: $it") }
             }
+
+            // For the Status tile: the radio's battery as last read.
+            override fun onBattery(millivolts: Int) = Glances.radioBattery(app, address, millivolts)
 
             override fun onQueueEmpty() {
                 if (outcome.isCompleted) return

@@ -2,8 +2,12 @@ package org.coloradomesh.wearmesh.glance
 
 import android.content.ComponentName
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.wear.tiles.TileService
 import androidx.wear.watchface.complications.datasource.ComplicationDataSourceUpdateRequester
+import org.coloradomesh.meshcore.protocol.RadioBattery
+import org.coloradomesh.wearmesh.CheckIn
+import org.coloradomesh.wearmesh.Mode
 import org.coloradomesh.wearmesh.Prefs
 import org.coloradomesh.wearmesh.SpikeLog
 import org.coloradomesh.wearmesh.SpikeState
@@ -30,7 +34,8 @@ object Glances {
         val unread = Glance.unread(lasts, channels, choices)
         fun message(row: MessageRow) =
             GlanceMessage(row.conversation, Notifier.titleFor(context, radio, row.conversation), row.sender, row.body, unread = !row.read)
-        val heard = Glance.heard(dao.newestReceived(radio, Glance.TILE_MESSAGES)).map(::message)
+        // As many as a large watch shows; a smaller one shows the first Glance.TILE_MESSAGES.
+        val heard = Glance.heard(dao.newestReceived(radio, Glance.TILE_MESSAGES_LARGE), Glance.TILE_MESSAGES_LARGE).map(::message)
         // Enough rows that, with quiet channels left out, one that counts is almost always among them.
         val replyTo = Glance.newest(dao.newestUnread(radio, NEWEST_ROWS), channels, choices, limit = 1).firstOrNull()?.let(::message)
         val chosen = complicationChannel(context, radio)
@@ -61,12 +66,78 @@ object Glances {
         } catch (e: RuntimeException) {
             SpikeLog.log("Glance: could not ask for a complication update (${e.message})")
         }
+        requestTile(app, WearMeshTileService::class.java)
+        requestTile(app, WearMeshStatusTileService::class.java)
+    }
+
+    /** Asks Wear OS to draw the Status tile again, as when the next check-in's time changes. */
+    fun refreshStatus(context: Context) = requestTile(context.applicationContext, WearMeshStatusTileService::class.java)
+
+    private fun requestTile(app: Context, tile: Class<out TileService>) {
         try {
-            TileService.getUpdater(app).requestUpdate(WearMeshTileService::class.java)
+            TileService.getUpdater(app).requestUpdate(tile)
         } catch (e: RuntimeException) {
             SpikeLog.log("Glance: could not ask for a Tile update (${e.message})")
         }
     }
+
+    /** What the Status tile shows, from what the app has saved. Reads settings only. */
+    fun status(context: Context): Status {
+        val prefs = Prefs.of(context)
+        val state = SpikeState.state.value
+        return Status(
+            mode = when {
+                Mode.hasQuit(context) -> Status.Mode.QUIT
+                Mode.get(context) == Mode.Kind.CHECK_IN -> Status.Mode.CHECK_IN
+                else -> Status.Mode.LIVE
+            },
+            intervalMinutes = CheckIn.intervalMinutes(context),
+            liveLink = state.takeIf { it.running }?.link,
+            // The radio's node name, from its greeting.
+            radioName = prefs.getString(Prefs.SELF_NAME, null),
+            lastSyncAt = prefs.getLong(Prefs.LAST_SYNC_AT, 0),
+            lastProblem = prefs.getString(Prefs.LAST_PROBLEM, null),
+            nextCheckInAt = prefs.getLong(Prefs.NEXT_CHECK_IN_AT, 0),
+            radioMillivolts = prefs.getInt(Prefs.RADIO_MILLIVOLTS, 0),
+            radioMillivoltsAt = prefs.getLong(Prefs.RADIO_MILLIVOLTS_AT, 0),
+        )
+    }
+
+    /**
+     * Keeps the radio's battery reading for the Status tile, and redraws that tile when the
+     * figure it shows changes (or the last reading had grown too old to show). A reading of 0,
+     * from a radio that cannot measure its battery, clears it. Only for [radio], and only while
+     * it is the one in use, so a check-in that ends after another is chosen saves nothing. Live reads the
+     * battery every few minutes and the figure moves rarely, so redraws are rare. Cheap enough
+     * for the protocol's callback: a settings write that does not wait for the disk, and a
+     * request Wear OS handles later.
+     */
+    fun radioBattery(context: Context, radio: String, millivolts: Int) {
+        var changed = false
+        val now = System.currentTimeMillis()
+        Prefs.writeForRadio(context, radio) { prefs, edit ->
+            if (millivolts <= 0) {
+                // The radio cannot measure it: forget an earlier reading, rather than show it for
+                // hours. Only a change redraws, so a radio that never measures costs nothing.
+                changed = prefs.contains(Prefs.RADIO_MILLIVOLTS)
+                edit.remove(Prefs.RADIO_MILLIVOLTS).remove(Prefs.RADIO_MILLIVOLTS_AT)
+            } else {
+                val before = prefs.getLong(Prefs.RADIO_MILLIVOLTS_AT, 0)
+                    .takeIf { now - it in 0 until Status.BATTERY_FRESH_MS }
+                    ?.let { RadioBattery.percent(prefs.getInt(Prefs.RADIO_MILLIVOLTS, 0)) }
+                edit.putInt(Prefs.RADIO_MILLIVOLTS, millivolts).putLong(Prefs.RADIO_MILLIVOLTS_AT, now)
+                changed = RadioBattery.percent(millivolts) != before
+            }
+        }
+        if (changed) requestTile(context.applicationContext, WearMeshStatusTileService::class.java)
+    }
+
+    /**
+     * Forgets what the Status tile shows of the radio in use (its battery and a failed try), as
+     * when another radio is chosen or it is forgotten, so none of it shows under another radio.
+     */
+    fun forgetRadioStatus(edit: SharedPreferences.Editor): SharedPreferences.Editor =
+        edit.remove(Prefs.RADIO_MILLIVOLTS).remove(Prefs.RADIO_MILLIVOLTS_AT).remove(Prefs.LAST_PROBLEM)
 
     private const val NEWEST_ROWS = 50
 }

@@ -28,9 +28,20 @@ object SyncStatus {
 
     fun started() = current.update { it.copy(syncing = true) }
 
-    fun finished(context: Context, problem: String?) {
+    /**
+     * A sync of [radio] ended, with [problem] or none. If another radio was chosen meanwhile,
+     * nothing of it is saved or shown: only that no sync is under way.
+     */
+    fun finished(context: Context, radio: String, problem: String?) {
         val now = System.currentTimeMillis()
-        if (problem == null) Prefs.of(context).edit().putLong(Prefs.LAST_SYNC_AT, now).apply()
+        val inUse = Prefs.writeForRadio(context, radio) { _, edit ->
+            if (problem == null) edit.putLong(Prefs.LAST_SYNC_AT, now).remove(Prefs.LAST_PROBLEM) else edit.putString(Prefs.LAST_PROBLEM, problem)
+        }
+        if (!inUse) {
+            SpikeLog.log("Check-in: ended for a radio no longer in use; not shown")
+            current.update { it.copy(syncing = false) }
+            return
+        }
         current.update {
             State(syncing = false, lastSyncAt = if (problem == null) now else it.lastSyncAt, problem = problem, lastAttemptAt = now)
         }
