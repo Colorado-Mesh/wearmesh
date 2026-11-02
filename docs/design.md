@@ -123,7 +123,7 @@ The app has three screens and two glanceable surfaces, built for one-handed use 
 **Feedback**
 
 - A channel send returns OK or ERR from the radio, not a delivery receipt, so the UI says Sent to radio, not Delivered. Direct messages carry an ACK, so they show Delivered once it arrives.
-- Haptic tick on send; distinct vibration for incoming messages, adjustable per channel.
+- Haptic tick on send (done 2 November 2026: a confirm tick when Send or a quick reply stores the message to send); distinct vibration for incoming messages, adjustable per channel (as built, direct messages and channels are two notification channels, each set in the watch's settings).
 
 ## Data and storage
 

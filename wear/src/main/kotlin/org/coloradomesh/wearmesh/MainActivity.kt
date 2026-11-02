@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import android.view.HapticFeedbackConstants
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -547,7 +548,11 @@ class MainActivity : ComponentActivity() {
                     // refused, it stays, with the text, so nothing typed is lost.
                     onSend = { body ->
                         withPermissions {
-                            Outbox.send(this@MainActivity, key, body)
+                            // A tick to say it is on its way (the design's haptic on send), once it
+                            // is stored: the write runs on the storage thread, so a moment after Send.
+                            Outbox.send(this@MainActivity, key, body) {
+                                if (!isDestroyed) window.decorView.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                            }
                             nav.popBackStack()
                         }
                     },

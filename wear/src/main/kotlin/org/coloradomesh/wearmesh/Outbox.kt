@@ -1,6 +1,8 @@
 package org.coloradomesh.wearmesh
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import org.coloradomesh.wearmesh.data.Storage
 import org.coloradomesh.wearmesh.notify.Notifier
 
@@ -13,8 +15,12 @@ import org.coloradomesh.wearmesh.notify.Notifier
  * message is [org.coloradomesh.wearmesh.ui.Drafts].
  */
 object Outbox {
-    /** Stores [body] to send in [conversation] on the radio in use, and starts sending it. Call on the main thread. */
-    fun send(context: Context, conversation: String, body: String) {
+    /**
+     * Stores [body] to send in [conversation] on the radio in use, and starts sending it. Call on
+     * the main thread. [onStored] runs on the main thread once the message is stored (or the same
+     * text already was); not if no radio is chosen or the write fails.
+     */
+    fun send(context: Context, conversation: String, body: String, onStored: (() -> Unit)? = null) {
         val app = context.applicationContext
         val prefs = Prefs.of(app)
         val radio = prefs.getString(Prefs.RADIO_ADDRESS, null)
@@ -29,6 +35,8 @@ object Outbox {
             if (store.addOutgoing(conversation, self, body, at) == -1L) {
                 SpikeLog.log("Outbox: the same text was just written in $conversation; not sent twice")
             }
+            // Reached only if the write did not throw: Storage.later logs a failure and stops here.
+            if (onStored != null) main.post { onStored() }
         }
         startSending(app)
     }
@@ -52,6 +60,8 @@ object Outbox {
             }
         }
     }
+
+    private val main = Handler(Looper.getMainLooper())
 
     /**
      * Each way reads the outbox on the storage thread, after anything queued before it is written.

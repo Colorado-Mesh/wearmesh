@@ -190,6 +190,9 @@ class SpikeService : Service() {
         val linkListener = object : CompanionClient.Listener by listener {
             override fun onQueueEmpty() {
                 listener.onQueueEmpty()
+                // Start-up is through and the queue collected: the link works, so the next drop
+                // starts again at the shortest pause.
+                main.post { if (mine == generation) reconnects = 0 }
                 if (mine == generation && readyOutbox !== sender) {
                     readyOutbox = sender
                     sender.sendPending()
@@ -250,7 +253,8 @@ class SpikeService : Service() {
 
     private fun linkReady(packetSize: Int) {
         linkUpAt = SystemClock.elapsedRealtime()
-        reconnects = 0
+        // The pause is not reset here: a link that comes up but never gets through start-up
+        // (the radio not answering) would otherwise retry at the shortest pause for ever.
         releaseWakeLock()
         SpikeLog.log("M0: link up, packet size $packetSize bytes")
         Glances.refresh(this)
