@@ -191,6 +191,9 @@ Four milestones, each ending in a go/no-go check; the first is a throwaway spike
    - Complete (1 November 2026): the carry used no more battery than M2 (about 0.8% an hour overnight in Check-in, about 2% an hour in Live), once wireless debugging, which had doubled the drain, was off ([M4-step3-carry.md](M4-step3-carry.md)). A day on stock MeshCore firmware found no differences from zephcore ([stock-firmware.md](stock-firmware.md)).
    - Changed (2 November 2026): the one Tile became two, Messages and Status, after Google's tile guidance ([tiles.md](tiles.md)).
    - Tested on the Pixel Watch 5 (2 November 2026, version 23, during PR 31): both tiles and the complication worked as intended, the Status tile followed Live's link going down and coming back, and crown scrolling worked on every long screen.
+6. **M5 — Sharing and release.** From a build on one watch to testers who sideload, then Google Play.
+   - Decided (30 October 2026): first a few technically minded Colorado Mesh members, from GitHub Releases; a personal Play account, with its 12-tester closed test; one release key for GitHub and Play, with a backup held by another Colorado Mesh developer; any Wear OS 4 or later watch; a switch to hide message text in the log; the name WearMesh, not affiliated with MeshCore; the privacy policy at coloradomesh.org.
+   - Steps: (1) release builds: signing, a tag workflow, versions 0.1.0 on, API 35 ([releasing.md](releasing.md)); (2) ready for strangers: an About screen, crash capture, the log's privacy and getting it off the watch; (3) first testers: a tester guide and v0.1.0; (4) Play internal testing; (5) the closed test; (6) production.
 
 **M0 results (23 October 2026): complete**
 

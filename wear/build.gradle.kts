@@ -13,14 +13,35 @@ android {
         applicationId = "org.coloradomesh.wearmesh"
         // Wear OS 4: the Android 12 Bluetooth permissions and notification permission always apply.
         minSdk = 33
-        targetSdk = 34
-        versionCode = 23
-        versionName = "0.0.23-two-tiles"
+        // Google Play needs API 35 for Wear OS apps from 31 August 2026 (docs/releasing.md).
+        targetSdk = 35
+        // Releases are 0.1.0, 0.2.0 and so on; between them, the next one with "-dev". The
+        // version code counts up by one for every build installed on a watch, release or not.
+        // The release workflow checks a tag such as v0.1.0 against versionName.
+        versionCode = 24
+        versionName = "0.1.0-dev"
+    }
+
+    // Release signing (M5). The key is never in the repository: its path and passwords come
+    // from the environment, set by the release workflow from GitHub secrets, or by hand for a
+    // signed build at home (docs/releasing.md). Without them, the release build is unsigned,
+    // as in CI on every pull request.
+    val keystore = System.getenv("WEARMESH_KEYSTORE")?.takeIf { it.isNotBlank() }
+    signingConfigs {
+        if (keystore != null) {
+            create("release") {
+                storeFile = file(keystore)
+                storePassword = System.getenv("WEARMESH_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("WEARMESH_KEY_ALIAS")
+                keyPassword = System.getenv("WEARMESH_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         getByName("release") {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 

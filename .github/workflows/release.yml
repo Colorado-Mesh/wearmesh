@@ -1,0 +1,186 @@
+name: Release
+
+# Pushing a tag such as v0.1.0 builds WearMesh signed with the release key, runs the tests, and
+# publishes a GitHub Release with the APK, for testers who sideload. The AAB, for Google Play,
+# is kept as a workflow artifact. The steps are in docs/releasing.md.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # The signing secrets live in this environment, which only v* tags may use.
+    environment: release
+    permissions:
+      # To create the release and attach the APK.
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: true
+          persist-credentials: false
+          # The whole history, to check the tag is on main.
+          fetch-depth: 0
+
+      - name: Check the tag is on main
+        shell: bash
+        run: |
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" FETCH_HEAD; then
+            echo "::error title=Not on main::The tag ${GITHUB_REF_NAME} is on a commit that is not on main. Release only from main, after the release's pull request is merged."
+            exit 1
+          fi
+
+      - name: Check the tag matches the version
+        shell: bash
+        run: |
+          version=$(sed -n 's/^ *versionName = "\(.*\)"$/\1/p' wear/build.gradle.kts)
+          tag="${GITHUB_REF_NAME}"
+          echo "versionName $version, tag $tag"
+          if [ "v$version" != "$tag" ]; then
+            echo "::error title=Version mismatch::The tag $tag does not match versionName \"$version\" in wear/build.gradle.kts. Set versionName to ${tag#v} in a pull request first, then tag."
+            exit 1
+          fi
+          case "$version" in
+            *-dev) echo "::error title=Development version::$version is a development version; set the release's version first."; exit 1 ;;
+          esac
+          heading=$(grep -E "^## ${version//./\\.}( |$)" CHANGELOG.md | head -n 1)
+          if [ -z "$heading" ]; then
+            echo "::error title=No changelog::CHANGELOG.md has no \"## $version\" section."
+            exit 1
+          fi
+          if printf '%s' "$heading" | grep -qi "not yet released"; then
+            echo "::error title=Changelog not dated::CHANGELOG.md still says \"$heading\". Give the section its release date first, as \"## $version (12 November 2026)\"."
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-provider: basic
+          cache-read-only: true
+
+      # Robolectric fetches Android's jars for the database tests itself, outside Gradle.
+      - name: Cache Robolectric's Android jars
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: robolectric-${{ hashFiles('gradle/libs.versions.toml') }}
+          restore-keys: robolectric-
+
+      - name: Put the release key in place
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.WEARMESH_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error title=No signing key::The release environment has no WEARMESH_KEYSTORE_BASE64 secret (docs/releasing.md)."
+            exit 1
+          fi
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/wearmesh-release.jks"
+          echo "WEARMESH_KEYSTORE=$RUNNER_TEMP/wearmesh-release.jks" >> "$GITHUB_ENV"
+
+      - name: Test and build the signed APK and AAB
+        shell: bash
+        env:
+          WEARMESH_KEYSTORE_PASSWORD: ${{ secrets.WEARMESH_KEYSTORE_PASSWORD }}
+          WEARMESH_KEY_ALIAS: ${{ secrets.WEARMESH_KEY_ALIAS }}
+          WEARMESH_KEY_PASSWORD: ${{ secrets.WEARMESH_KEY_PASSWORD }}
+        run: .github/scripts/gradle-retry.sh test assembleRelease bundleRelease
+
+      - name: Check the APK is signed with the release key
+        shell: bash
+        env:
+          # The release certificate's SHA-256 fingerprint, a variable of the release environment:
+          # an APK signed with any other key could not update testers' installs.
+          EXPECTED_SHA256: ${{ vars.WEARMESH_CERT_SHA256 }}
+        run: |
+          expected=$(printf '%s' "$EXPECTED_SHA256" | tr -d ': ' | tr '[:upper:]' '[:lower:]')
+          if [ -z "$expected" ]; then
+            echo "::error title=No fingerprint::The release environment has no WEARMESH_CERT_SHA256 variable (docs/releasing.md)."
+            exit 1
+          fi
+          # The newest build tools on the runner.
+          apksigner=$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -name apksigner | sort -V | tail -n 1)
+          "$apksigner" verify --print-certs wear/build/outputs/apk/release/wear-release.apk | tee signature.txt
+          # One signer, and it is the release key.
+          digests=$(sed -n 's/^Signer #[0-9]* certificate SHA-256 digest: *//p' signature.txt | tr '[:upper:]' '[:lower:]')
+          if [ "$digests" != "$expected" ]; then
+            echo "::error title=Wrong key::The APK is not signed with the release key alone (signer digests: ${digests:-none}; expected $expected)."
+            exit 1
+          fi
+          mkdir -p out
+          cp wear/build/outputs/apk/release/wear-release.apk "out/wearmesh-${VERSION}.apk"
+          cp wear/build/outputs/bundle/release/wear-release.aab "out/wearmesh-${VERSION}.aab"
+          (cd out && sha256sum "wearmesh-${VERSION}.apk" > "wearmesh-${VERSION}.apk.sha256")
+
+      - name: Remove the key
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/wearmesh-release.jks"
+
+      # Before publishing, so a failed upload leaves no release without its AAB.
+      - name: Keep the AAB for Google Play
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wearmesh-${{ env.VERSION }}-aab
+          path: out/wearmesh-${{ env.VERSION }}.aab
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Publish the GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # This version's section of CHANGELOG.md, without its heading.
+          awk -v v="$VERSION" '
+            $0 ~ "^## " v "([^0-9.]|$)" { on = 1; next }
+            on && /^## / { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          cat >> notes.md <<NOTES
+
+          ### Installing
+
+          **If the watch has a WearMesh you built yourself** (a debug build), the install fails with
+          \`INSTALL_FAILED_UPDATE_INCOMPATIBLE\`: releases are signed with a different key. Removing
+          it first (\`adb uninstall org.coloradomesh.wearmesh\`) deletes its messages and settings,
+          and Alarms & reminders has to be allowed again. Releases update each other without that.
+
+          Check the download first: \`sha256sum -c wearmesh-${VERSION}.apk.sha256\`. Then, with the
+          watch and computer on the same Wi-Fi and [adb](https://developer.android.com/tools/releases/platform-tools)
+          on the computer:
+
+          1. On the watch, turn on Settings › Developer options › Wireless debugging (tap Build number
+             seven times in Settings › System › About › Versions to show Developer options).
+          2. In Wireless debugging, tap **Pair new device**, then on the computer run
+             \`adb pair <ip>:<pairing port>\` with the code the watch shows.
+          3. Back in Wireless debugging, run \`adb connect <ip>:<port>\` with the address shown there.
+          4. Run \`adb install -r wearmesh-${VERSION}.apk\`.
+
+          Turn Wireless debugging off afterwards: it roughly doubles the watch's battery drain.
+          NOTES
+          # Versions before 1.0 are marked as pre-releases.
+          prerelease=""
+          case "$VERSION" in 0.*) prerelease="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" \
+            "out/wearmesh-${VERSION}.apk" "out/wearmesh-${VERSION}.apk.sha256" \
+            --repo "$GITHUB_REPOSITORY" --title "WearMesh ${VERSION}" --notes-file notes.md $prerelease
+
