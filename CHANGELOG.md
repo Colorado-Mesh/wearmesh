@@ -24,7 +24,8 @@ with MeshCore.
 - Settings › About WearMesh: the version, the radio and its firmware, and where the source is.
 - The log leaves out message text unless Diagnostics › Message text in log is on, records
   crashes, and Diagnostics › Save log puts a copy where `adb pull /sdcard/Download/WearMesh/`
-  fetches it.
+  fetches it. Lines written by an earlier version, or while the switch was on, keep their text:
+  tap Diagnostics › Clear log before sharing a log if that matters.
 
 Tested on a Pixel Watch 5 with a Heltec Mesh Node T1 on zephcore firmware and a WisMesh Tag on
 stock MeshCore companion firmware.

@@ -417,12 +417,12 @@ class SpikeService : Service() {
 
         override fun onChannelMessage(message: ChannelMessage) {
             val name = channelNames[message.channelIndex] ?: "channel ${message.channelIndex}"
-            SpikeLog.log("$name ${age(message.timestamp)}: ${SpikeLog.messageText(message.text)}")
+            SpikeLog.logMessage("$name ${age(message.timestamp)}: ", message.text)
             SpikeState.update { it.copy(messages = it.messages + 1) }
         }
 
         override fun onDirectMessage(message: DirectMessage) {
-            SpikeLog.log("DM from ${message.senderPrefixHex} ${age(message.timestamp)}: ${SpikeLog.messageText(message.text)}")
+            SpikeLog.logMessage("DM from ${message.senderPrefixHex} ${age(message.timestamp)}: ", message.text)
             SpikeState.update { it.copy(messages = it.messages + 1) }
         }
 

@@ -18,7 +18,7 @@ import java.util.Locale
  * text file in the app's own files that survives the screen going off and the app closing.
  *
  * For testers (M5 step 2, decided 2 November 2026):
- * - Message text is left out unless Diagnostics › Message text in log is on ([messageText]); the
+ * - Message text is left out unless Diagnostics › Message text in log is on ([logMessage]); the
  *   log still has who and when. Off by default, also in releases.
  * - The file is capped: past [MAX_FILE_BYTES] it becomes [OLD_FILE_NAME] and a new one starts, so
  *   about two files' worth is kept.
@@ -108,8 +108,13 @@ object SpikeLog {
         }
     }
 
-    /** A message's text as the log shows it: itself, or only its length while text is hidden. */
-    fun messageText(text: String): String = LogPrivacy.text(text, showingText.value)
+    /**
+     * Logs a received message as [prefix] then its text, shown or hidden as the switch is at this
+     * moment. The switch is read and the line written under the log's lock, so a message cannot be
+     * written in clear just after the switch is turned off.
+     */
+    @Synchronized
+    fun logMessage(prefix: String, text: String) = log(prefix + LogPrivacy.text(text, showingText.value))
 
     /** Turns message text in the log on or off, from the next line on; lines already written stay as they are. */
     @Synchronized
