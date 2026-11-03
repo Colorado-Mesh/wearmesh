@@ -164,7 +164,8 @@ jobs:
           it first (\`adb uninstall org.coloradomesh.wearmesh\`) deletes its messages and settings,
           and Alarms & reminders has to be allowed again. Releases update each other without that.
 
-          Check the download first: \`sha256sum -c wearmesh-${VERSION}.apk.sha256\`. Then, with the
+          Check the download first: \`sha256sum -c wearmesh-${VERSION}.apk.sha256\` (on macOS,
+          \`shasum -a 256 -c wearmesh-${VERSION}.apk.sha256\`). Then, with the
           watch and computer on the same Wi-Fi and [adb](https://developer.android.com/tools/releases/platform-tools)
           on the computer:
 

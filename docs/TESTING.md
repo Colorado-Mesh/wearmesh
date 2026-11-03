@@ -30,8 +30,14 @@ Bluetooth off). If the phone app reconnects, WearMesh cannot.
 ## Installing
 
 1. **Download** `wearmesh-<version>.apk` and its `.sha256` file from
-   [Releases](https://github.com/Colorado-Mesh/wearmesh/releases). Check the download (macOS and
-   Linux): `sha256sum -c wearmesh-<version>.apk.sha256`, which should say `OK`.
+   [Releases](https://github.com/Colorado-Mesh/wearmesh/releases). Check the download, in the
+   folder you saved both to; each should say `OK`, or print the same value as the `.sha256` file:
+
+   ```bash
+   sha256sum -c wearmesh-<version>.apk.sha256          # Linux
+   shasum -a 256 -c wearmesh-<version>.apk.sha256      # macOS
+   certutil -hashfile wearmesh-<version>.apk SHA256    # Windows: compare with the .sha256 file
+   ```
 2. **Show Developer options on the watch**: Settings › System › About › Versions, then tap
    **Build number** seven times. (On a Galaxy Watch it is usually Settings › About watch
    › Software information › Software version.)
@@ -129,9 +135,11 @@ The log says what WearMesh did and when. It is the most useful thing to attach.
 3. Attach the file to the issue.
 
 **What the log holds:** times, what was synced and sent, the names of your radio, channels and
-contacts, and errors. It does not hold the text of messages: Diagnostics › Message text in log is
-off unless you turn it on, and you should only do that if asked. Diagnostics › **Clear log**
-empties it, for example before reproducing a problem so the log holds only that.
+contacts, and errors. While Diagnostics › Message text in log is off, which it is unless you turn
+it on (only do that if asked), messages are logged without their text. Lines written while it was
+on keep their text, even after you turn it off, and Save log copies them. So if you ever turned
+it on, tap Diagnostics › **Clear log** before reproducing the problem you report; the log then
+holds only that. Clear log also helps when the log is long.
 
 ## Known limits
 

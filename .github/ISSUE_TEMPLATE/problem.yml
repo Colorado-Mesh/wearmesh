@@ -57,5 +57,7 @@ body:
     id: privacy
     attributes:
       label: Before attaching the log
+      description: Lines written while Message text in log was on keep their text even after it is turned off. Clear log before reproducing the problem if that matters.
       options:
-        - label: Message text in log was off (the default), or I am happy to share the text it holds
+        - label: The log I attach holds no message text I mind sharing (Message text in log was off, the default, or I cleared the log since it was on), or I attach no log
+          required: true

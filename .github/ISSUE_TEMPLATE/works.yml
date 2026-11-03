@@ -27,6 +27,16 @@ body:
       label: Radio and firmware
     validations:
       required: true
+  - type: dropdown
+    id: overall
+    attributes:
+      label: How did it go overall?
+      options:
+        - Everything I tried worked
+        - Mostly worked, with some problems (say which below)
+        - Did not work (say what happened below)
+    validations:
+      required: true
   - type: checkboxes
     id: worked
     attributes:
