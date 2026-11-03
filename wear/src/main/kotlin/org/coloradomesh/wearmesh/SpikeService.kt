@@ -213,6 +213,17 @@ class SpikeService : Service() {
                 listener.onContactSaved(publicKeyHex, saved, errorCode)
             }
 
+            // Saved for this link's radio, not whichever is in use by the time an answer comes.
+            override fun onDevice(info: DeviceInfo) {
+                listener.onDevice(info)
+                RadioFacts.save(this@SpikeService, target, info)
+            }
+
+            override fun onBattery(millivolts: Int) {
+                Glances.radioBattery(this@SpikeService, target, millivolts)
+                listener.onBattery(millivolts)
+            }
+
             // A link that is up but never got through start-up would sit idle: close it, and the
             // reconnect after a drop tries again.
             override fun onStartUpFailed(what: String) {
@@ -389,7 +400,6 @@ class SpikeService : Service() {
             val firmware = RadioFacts.firmware(info)
             SpikeLog.log("Radio: ${info.model.ifEmpty { "unknown model" }}, firmware $firmware, ${info.maxChannels} channel slots")
             SpikeState.update { it.copy(firmware = firmware) }
-            address?.let { RadioFacts.save(this@SpikeService, it, info) }
         }
 
         override fun onContact(contact: Contact) {
@@ -437,7 +447,6 @@ class SpikeService : Service() {
         }
 
         override fun onBattery(millivolts: Int) {
-            address?.let { Glances.radioBattery(this@SpikeService, it, millivolts) }
             if (millivolts > 0) SpikeLog.log("Radio battery: $millivolts mV")
             SpikeLog.log("Live: watch battery ${watchBattery()}%")
             SpikeState.update { it.copy(radioMillivolts = millivolts.takeIf { mv -> mv > 0 }) }

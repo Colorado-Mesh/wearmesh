@@ -210,7 +210,7 @@ fun DiagnosticsScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-        item { WideChip("Clear log", secondary = true) { onClearLog() } }
+        item { WideChip("Clear log", secondary = true, enabled = !saving) { onClearLog() } }
     }
 }
 

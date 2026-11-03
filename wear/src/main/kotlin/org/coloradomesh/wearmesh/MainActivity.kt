@@ -792,9 +792,12 @@ class MainActivity : ComponentActivity() {
                             saving = false
                         }
                     },
+                    // Not while a save runs: it has copied the log already, so its file would keep what was cleared.
                     onClearLog = {
-                        SpikeLog.clear()
-                        saved = null
+                        if (!saving) {
+                            SpikeLog.clear()
+                            saved = null
+                        }
                     },
                 )
             }

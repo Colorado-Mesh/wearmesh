@@ -13,7 +13,7 @@ for later, before Play testers, who will not have it.
 | Message text in the log | Off by default, also in releases: a received message is logged as "(text hidden, 42 characters)", with who sent it and when. Diagnostics › Message text in log turns it on, from that moment; lines already written stay as they are. Names of channels and contacts are still logged. Lines written before this version may hold message text: Clear log removes them |
 | Save log | Diagnostics › Save log copies the log to the watch's Download/WearMesh folder, as `wearmesh-log-2026-11-02-183005.txt`, where adb can fetch it: a release build's own files cannot be read with `adb shell run-as`, which works only for debug builds |
 | The log file | Now `wearmesh-log.txt` (the old `m0-log.txt` is moved on first start). Past 2 MB it becomes `wearmesh-log.old.txt` and a new one starts, so the newest 2 to 4 MB are kept, not everything for ever. Clear log empties both |
-| Crashes | An uncaught crash is written to the log, with its stack (15 frames for the error and each cause), before Android closes the app |
+| Crashes | An uncaught crash is written to the log, with its stack (15 frames for the error and each of up to four causes, and a count of any deeper ones), before Android closes the app |
 | Log wording | Live's lines say "Live:", not "M0:" |
 | Alarms & reminders | In Check-in without it, Home says Check-in needs it to sync on time while the watch sleeps, with Allow alarms, instead of only Settings saying so |
 | Radio facts | The radio's model and firmware are kept from Check-in too, not only Live, for About; cleared when another radio is chosen |
@@ -43,8 +43,9 @@ adb shell run-as org.coloradomesh.wearmesh cat files/wearmesh-log.txt > wearmesh
    it off again.
 3. **Save log.** Tap Save log: a note gives the file's name. `adb pull /sdcard/Download/WearMesh/`
    fetches it, and it holds the log.
-4. **The old log moved.** The saved log starts with lines from before this version (the old file
-   was moved, not lost).
+4. **The old log moved**, on a watch that had an earlier version: the saved log starts with lines
+   from before this one (the old file was moved, not lost). After a fresh install there is no old
+   log, and the saved one starts with this version's first lines.
 5. **Alarms.** In Check-in, take Alarms & reminders away from WearMesh: Home shows the note and
    Allow alarms. Give it back: the note goes. On the Pixel Watch 5 the switch in the watch's
    settings cannot be turned off, so do it with adb, for the app's user ID as well as its package

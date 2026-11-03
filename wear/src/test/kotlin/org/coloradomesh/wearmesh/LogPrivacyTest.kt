@@ -30,6 +30,16 @@ class LogPrivacyTest {
     }
 
     @Test
+    fun causesPastTheLimitAreCounted() {
+        // Seven throwables: the error and six causes; five are shown, and the two deepest counted.
+        var error: Throwable = RuntimeException("root")
+        for (i in 1..6) error = RuntimeException("level $i", error)
+        val lines = CrashReport.lines("t", error)
+        assertEquals(4, lines.count { it.startsWith("Caused by: java") })
+        assertEquals("Caused by: … 2 more causes, not shown", lines.last())
+    }
+
+    @Test
     fun aCauseThatLoopsEnds() {
         val a = RuntimeException("a")
         val b = RuntimeException("b", a)

@@ -9,7 +9,7 @@ Mesh developer; version names 0.1.0, 0.2.0 and so on; and API 35, which Google P
 | | |
 | --- | --- |
 | `versionName` | `0.1.0`, `0.2.0`, … for releases. Between releases it is the next one with `-dev`, such as `0.1.0-dev`, so a build from `main` never passes for a release |
-| `versionCode` | Counts up by one for every build installed on a watch, release or not (24 for 0.1.0-dev). Android will not install a lower code over a higher one, and Play needs each upload higher than the last |
+| `versionCode` | Counts up by one for every build installed on a watch, release or not (25 for 0.1.0-dev, as of M5 step 2). Android will not install a lower code over a higher one, and Play needs each upload higher than the last |
 
 Both are in `wear/build.gradle.kts`. Versions before 1.0 are published as pre-releases.
 

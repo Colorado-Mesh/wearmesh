@@ -75,14 +75,25 @@ object SpikeLog {
         val target = file ?: return
         try {
             if (target.length() > MAX_FILE_BYTES) {
-                oldFile?.let { old ->
-                    old.delete()
-                    if (!target.renameTo(old)) target.writeText("")
-                }
+                oldFile?.let { old -> roll(target, old) }
             }
             target.appendText("${fileStamp.format(Date(now))} $text\n")
         } catch (e: IOException) {
             Log.w(TAG, "Could not write the log file", e)
+        }
+    }
+
+    /**
+     * Makes [current] the older file and starts a new one. Through a temporary name, so if a rename
+     * fails both files stay as they were and the log simply grows a little longer.
+     */
+    private fun roll(current: File, old: File) {
+        val previous = File(old.parentFile, "$OLD_FILE_NAME.previous")
+        if (old.exists() && !old.renameTo(previous)) return
+        if (current.renameTo(old)) {
+            previous.delete()
+        } else if (previous.exists()) {
+            previous.renameTo(old)
         }
     }
 
@@ -114,7 +125,8 @@ object SpikeLog {
     fun clear() {
         shown.value = emptyList()
         try {
-            oldFile?.delete()
+            // If the older file cannot be deleted, it is emptied, so its lines go either way.
+            oldFile?.let { old -> if (old.exists() && !old.delete()) old.writeText("") }
             file?.writeText("")
         } catch (e: IOException) {
             Log.w(TAG, "Could not clear the log file", e)
@@ -155,7 +167,11 @@ object SpikeLog {
             name
         } catch (e: Exception) {
             Log.w(TAG, "Could not write the saved log", e)
-            resolver.delete(uri, null, null)
+            try {
+                resolver.delete(uri, null, null)
+            } catch (cleanup: RuntimeException) {
+                Log.w(TAG, "Could not remove the unfinished saved log", cleanup)
+            }
             null
         }
     }
