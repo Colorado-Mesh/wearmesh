@@ -141,3 +141,6 @@ On the watch, with the version 24 debug build:
    reconnects.
 4. **Send.** A channel message and a direct message go, from the app and from a notification's
    Quick reply.
+
+All four passed on the Pixel Watch 5 on 2 November 2026 (version 24, during PR 32). A release
+build signed at home with the release key showed the same SHA-256 fingerprint as the key.

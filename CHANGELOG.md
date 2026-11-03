@@ -21,6 +21,10 @@ with MeshCore.
 - Optional: keep the contacts you message on the radio (Settings › Keep contacts on radio).
 - Two tiles, Messages and Status, and an unread-count complication.
 - Sets the radio's clock when it is more than a minute off.
+- Settings › About WearMesh: the version, the radio and its firmware, and where the source is.
+- The log leaves out message text unless Diagnostics › Message text in log is on, records
+  crashes, and Diagnostics › Save log puts a copy where `adb pull /sdcard/Download/WearMesh/`
+  fetches it.
 
 Tested on a Pixel Watch 5 with a Heltec Mesh Node T1 on zephcore firmware and a WisMesh Tag on
 stock MeshCore companion firmware.

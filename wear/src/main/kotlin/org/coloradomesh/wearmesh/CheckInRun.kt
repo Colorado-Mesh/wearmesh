@@ -19,6 +19,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.coloradomesh.meshcore.ble.RadioSession
 import org.coloradomesh.meshcore.protocol.CompanionClient
 import org.coloradomesh.meshcore.protocol.Contact
+import org.coloradomesh.meshcore.protocol.DeviceInfo
 import org.coloradomesh.meshcore.protocol.DirectOutcome
 import org.coloradomesh.meshcore.protocol.SelfInfo
 import org.coloradomesh.wearmesh.data.Delays
@@ -234,6 +235,8 @@ object CheckInRun {
 
             // Saved without waiting; mentions of this name stand out in conversations.
             override fun onSelf(info: SelfInfo) = Prefs.of(app).edit().putString(Prefs.SELF_NAME, info.name).apply()
+
+            override fun onDevice(info: DeviceInfo) = RadioFacts.save(app, address, info)
 
             override fun onRadioClock(radioSeconds: Long, clientSeconds: Long, setting: Boolean) {
                 RadioClock.describe(radioSeconds, clientSeconds, setting)?.let { SpikeLog.log("Check-in: $it") }

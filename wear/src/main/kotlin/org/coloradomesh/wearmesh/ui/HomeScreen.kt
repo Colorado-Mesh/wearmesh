@@ -19,9 +19,11 @@ fun HomeScreen(
     now: Long,
     checkNowEnabled: Boolean,
     offerCheckIn: Boolean,
+    alarmsNeeded: Boolean,
     onCheckNow: () -> Unit,
     onNewMessage: () -> Unit,
     onOfferAnswered: (switch: Boolean) -> Unit,
+    onAllowAlarms: () -> Unit,
     onOpen: (HomeRow) -> Unit,
     onRadios: () -> Unit,
     onSettings: () -> Unit,
@@ -34,6 +36,11 @@ fun HomeScreen(
             item { Note("Save battery: sync every 15 minutes instead of staying connected?") }
             item { WideChip("Switch to Check-in") { onOfferAnswered(true) } }
             item { WideChip("Not now", secondary = true) { onOfferAnswered(false) } }
+        }
+        if (alarmsNeeded) {
+            // Without it Check-in only syncs when the app is opened (M5 step 2: say so up front).
+            item { Note("Check-in needs Alarms & reminders to sync on time while the watch sleeps. It is off for WearMesh.") }
+            item { WideChip("Allow alarms", detail = "Opens the watch's setting") { onAllowAlarms() } }
         }
         item { WideChip("Check now", secondary = true, enabled = checkNowEnabled) { onCheckNow() } }
         item { WideChip("New message", secondary = true) { onNewMessage() } }

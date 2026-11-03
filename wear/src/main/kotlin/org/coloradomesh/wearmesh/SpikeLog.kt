@@ -1,6 +1,9 @@
 package org.coloradomesh.wearmesh
 
+import android.content.ContentValues
 import android.content.Context
+import android.os.Environment
+import android.provider.MediaStore
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -11,28 +14,57 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Everything the M0 spike observes, in three places: the watch screen (newest first), logcat
- * under the tag [TAG], and a text file in the app's files folder that survives the screen going
- * off and the app closing. Pull the file with
- * `adb shell run-as org.coloradomesh.wearmesh cat files/m0-log.txt`.
+ * The app's log, in three places: Diagnostics (newest first), logcat under the tag [TAG], and a
+ * text file in the app's own files that survives the screen going off and the app closing.
+ *
+ * For testers (M5 step 2, decided 2 November 2026):
+ * - Message text is left out unless Diagnostics › Message text in log is on ([messageText]); the
+ *   log still has who and when. Off by default, also in releases.
+ * - The file is capped: past [MAX_FILE_BYTES] it becomes [OLD_FILE_NAME] and a new one starts, so
+ *   about two files' worth is kept.
+ * - Diagnostics › Save log copies both to the watch's Download/WearMesh folder ([save]), from
+ *   where `adb pull` fetches it, as a release build's own files cannot be read with adb.
+ * - A crash is written to it before the app closes ([crash]).
  */
 object SpikeLog {
     data class Line(val at: Long, val text: String)
 
     const val TAG = "WearMesh"
-    private const val FILE_NAME = "m0-log.txt"
+    const val FILE_NAME = "wearmesh-log.txt"
+    const val OLD_FILE_NAME = "wearmesh-log.old.txt"
+
+    /** Where the log was before M5; moved on first start. */
+    private const val M0_FILE_NAME = "m0-log.txt"
+    private const val MAX_FILE_BYTES = 2_000_000L
     private const val MAX_LINES = 300
+
+    /** The folder under Download that [save] writes to. */
+    const val SAVE_FOLDER = "WearMesh"
 
     private val shown = MutableStateFlow<List<Line>>(emptyList())
     val lines: StateFlow<List<Line>> = shown
 
+    private val showingText = MutableStateFlow(false)
+
+    /** Whether message text goes into the log; see [setShowText]. */
+    val showText: StateFlow<Boolean> = showingText
+
     private var file: File? = null
+    private var oldFile: File? = null
     private val fileStamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
     private val screenStamp = SimpleDateFormat("HH:mm:ss", Locale.US)
 
     @Synchronized
     fun init(context: Context) {
-        if (file == null) file = File(context.applicationContext.filesDir, FILE_NAME)
+        if (file != null) return
+        val app = context.applicationContext
+        val dir = app.filesDir
+        val current = File(dir, FILE_NAME)
+        val m0 = File(dir, M0_FILE_NAME)
+        if (m0.exists() && !current.exists() && !m0.renameTo(current)) Log.w(TAG, "Could not move the old log file")
+        file = current
+        oldFile = File(dir, OLD_FILE_NAME)
+        showingText.value = Prefs.of(app).getBoolean(Prefs.LOG_MESSAGE_TEXT, false)
     }
 
     @Synchronized
@@ -40,24 +72,91 @@ object SpikeLog {
         val now = System.currentTimeMillis()
         Log.i(TAG, text)
         shown.value = (listOf(Line(now, text)) + shown.value).take(MAX_LINES)
+        val target = file ?: return
         try {
-            file?.appendText("${fileStamp.format(Date(now))} $text\n")
+            if (target.length() > MAX_FILE_BYTES) {
+                oldFile?.let { old ->
+                    old.delete()
+                    if (!target.renameTo(old)) target.writeText("")
+                }
+            }
+            target.appendText("${fileStamp.format(Date(now))} $text\n")
         } catch (e: IOException) {
             Log.w(TAG, "Could not write the log file", e)
         }
     }
 
+    /** A message's text as the log shows it: itself, or only its length while text is hidden. */
+    fun messageText(text: String): String = LogPrivacy.text(text, showingText.value)
+
+    /** Turns message text in the log on or off, from the next line on; lines already written stay as they are. */
+    @Synchronized
+    fun setShowText(context: Context, show: Boolean) {
+        Prefs.of(context).edit().putBoolean(Prefs.LOG_MESSAGE_TEXT, show).apply()
+        showingText.value = show
+        log("Log: message text ${if (show) "shown" else "hidden"} from now on")
+    }
+
     @Synchronized
     fun clock(at: Long): String = screenStamp.format(Date(at))
 
-    /** Empties the screen and starts the file again, for a clean test run. */
+    /** Writes [error], which [thread] did not catch, to the log, before the app closes. */
+    fun crash(thread: Thread, error: Throwable) {
+        try {
+            log(CrashReport.lines(thread.name, error).joinToString("\n"))
+        } catch (e: Throwable) {
+            Log.e(TAG, "Could not log the crash", e)
+        }
+    }
+
+    /** Empties Diagnostics and both files, for a clean test run or before a log is shared. */
     @Synchronized
     fun clear() {
         shown.value = emptyList()
         try {
+            oldFile?.delete()
             file?.writeText("")
         } catch (e: IOException) {
             Log.w(TAG, "Could not clear the log file", e)
+        }
+    }
+
+    /**
+     * Copies the log, older part first, to Download/[SAVE_FOLDER] on the watch, named for the time.
+     * Returns the file's name, or null if it could not be saved. Call off the main thread.
+     */
+    fun save(context: Context): String? {
+        val name = LogPrivacy.saveName(System.currentTimeMillis())
+        val text = synchronized(this) {
+            try {
+                listOfNotNull(oldFile, file).filter { it.exists() }.joinToString("") { it.readText() }
+            } catch (e: IOException) {
+                Log.w(TAG, "Could not read the log file", e)
+                return null
+            }
+        }
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+            put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")
+            put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/$SAVE_FOLDER")
+            put(MediaStore.MediaColumns.IS_PENDING, 1)
+        }
+        val resolver = context.applicationContext.contentResolver
+        val uri = try {
+            resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "Could not make the saved log", e)
+            null
+        } ?: return null
+        return try {
+            resolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) } ?: throw IOException("no stream")
+            resolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
+            log("Log: saved to Download/$SAVE_FOLDER/$name")
+            name
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not write the saved log", e)
+            resolver.delete(uri, null, null)
+            null
         }
     }
 }

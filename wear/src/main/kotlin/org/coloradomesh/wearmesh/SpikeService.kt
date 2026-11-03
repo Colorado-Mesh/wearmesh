@@ -112,7 +112,7 @@ class SpikeService : Service() {
                 endOutbox()
                 SpikeState.update { SpikeState.Snapshot(running = true, link = "Connecting…") }
                 Glances.refresh(this)
-                SpikeLog.log("M0: connecting to $target; watch battery ${watchBattery()}%")
+                SpikeLog.log("Live: connecting to $target; watch battery ${watchBattery()}%")
                 openSession()
             }
             ACTION_SEND_PENDING -> {
@@ -216,7 +216,7 @@ class SpikeService : Service() {
             // A link that is up but never got through start-up would sit idle: close it, and the
             // reconnect after a drop tries again.
             override fun onStartUpFailed(what: String) {
-                SpikeLog.log("M0: the radio did not answer $what; closing the link to try again")
+                SpikeLog.log("Live: the radio did not answer $what; closing the link to try again")
                 main.post { if (mine == generation) link.get()?.close() }
             }
         }
@@ -257,7 +257,7 @@ class SpikeService : Service() {
         // The pause is not reset here: a link that comes up but never gets through start-up
         // (the radio not answering) would otherwise retry at the shortest pause for ever.
         releaseWakeLock()
-        SpikeLog.log("M0: link up, packet size $packetSize bytes")
+        SpikeLog.log("Live: link up, packet size $packetSize bytes")
         SpikeState.update { it.copy(link = "Connected", packetSize = packetSize) }
         // After the state changes, so the tiles read the new link state.
         Glances.refresh(this)
@@ -273,7 +273,7 @@ class SpikeService : Service() {
         Storage.refreshCounts(this)
         if (linkUpAt > 0) {
             val minutes = (SystemClock.elapsedRealtime() - linkUpAt) / 60_000.0
-            SpikeLog.log("M0: link down after %.1f min (%s)".format(minutes, reason))
+            SpikeLog.log("Live: link down after %.1f min (%s)".format(minutes, reason))
             linkUpAt = 0
         }
         if (stopping) {
@@ -282,7 +282,7 @@ class SpikeService : Service() {
         }
         val pause = (RECONNECT_FIRST_MS shl reconnects.coerceAtMost(4)).coerceAtMost(RECONNECT_MAX_MS)
         reconnects++
-        SpikeLog.log("M0: reconnecting in ${pause / 1000} s (try $reconnects)")
+        SpikeLog.log("Live: reconnecting in ${pause / 1000} s (try $reconnects)")
         SpikeState.update { it.copy(link = "Reconnecting in ${pause / 1000} s", packetSize = null) }
         // So the tiles stop saying Connected. Once per reconnect, which backs off to minutes.
         Glances.refresh(this)
@@ -305,7 +305,7 @@ class SpikeService : Service() {
         main.removeCallbacks(reconnectTimer)
         cancelReconnectAlarm()
         if (stopping || session != null) return
-        if (by == "alarm") SpikeLog.log("M0: reconnecting now (woken by the alarm)")
+        if (by == "alarm") SpikeLog.log("Live: reconnecting now (woken by the alarm)")
         acquireWakeLock()
         openSession()
     }
@@ -343,7 +343,7 @@ class SpikeService : Service() {
         main.removeCallbacksAndMessages(null)
         cancelReconnectAlarm()
         releaseWakeLock()
-        SpikeLog.log("M0: stopped; watch battery ${watchBattery()}%")
+        SpikeLog.log("Live: stopped; watch battery ${watchBattery()}%")
         Glances.refresh(this)
         SpikeState.update { SpikeState.Snapshot() }
         address = null
@@ -386,10 +386,10 @@ class SpikeService : Service() {
         }
 
         override fun onDevice(info: DeviceInfo) {
-            val firmware = listOf(info.version, info.build).filter { it.isNotEmpty() }.joinToString(" ")
-                .ifEmpty { "protocol ${info.firmwareVersion}" }
+            val firmware = RadioFacts.firmware(info)
             SpikeLog.log("Radio: ${info.model.ifEmpty { "unknown model" }}, firmware $firmware, ${info.maxChannels} channel slots")
             SpikeState.update { it.copy(firmware = firmware) }
+            address?.let { RadioFacts.save(this@SpikeService, it, info) }
         }
 
         override fun onContact(contact: Contact) {
@@ -407,12 +407,12 @@ class SpikeService : Service() {
 
         override fun onChannelMessage(message: ChannelMessage) {
             val name = channelNames[message.channelIndex] ?: "channel ${message.channelIndex}"
-            SpikeLog.log("$name ${age(message.timestamp)}: ${message.text}")
+            SpikeLog.log("$name ${age(message.timestamp)}: ${SpikeLog.messageText(message.text)}")
             SpikeState.update { it.copy(messages = it.messages + 1) }
         }
 
         override fun onDirectMessage(message: DirectMessage) {
-            SpikeLog.log("DM from ${message.senderPrefixHex} ${age(message.timestamp)}: ${message.text}")
+            SpikeLog.log("DM from ${message.senderPrefixHex} ${age(message.timestamp)}: ${SpikeLog.messageText(message.text)}")
             SpikeState.update { it.copy(messages = it.messages + 1) }
         }
 
@@ -439,7 +439,7 @@ class SpikeService : Service() {
         override fun onBattery(millivolts: Int) {
             address?.let { Glances.radioBattery(this@SpikeService, it, millivolts) }
             if (millivolts > 0) SpikeLog.log("Radio battery: $millivolts mV")
-            SpikeLog.log("M0: watch battery ${watchBattery()}%")
+            SpikeLog.log("Live: watch battery ${watchBattery()}%")
             SpikeState.update { it.copy(radioMillivolts = millivolts.takeIf { mv -> mv > 0 }) }
         }
     }
