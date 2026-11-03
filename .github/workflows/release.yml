@@ -176,6 +176,8 @@ jobs:
           4. Run \`adb install -r wearmesh-${VERSION}.apk\`.
 
           Turn Wireless debugging off afterwards: it roughly doubles the watch's battery drain.
+          The full guide, with first run, what to test and how to report, is
+          [docs/TESTING.md](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/docs/TESTING.md).
           NOTES
           # Versions before 1.0 are marked as pre-releases.
           prerelease=""

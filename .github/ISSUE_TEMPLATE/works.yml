@@ -1,0 +1,51 @@
+name: Works on my watch
+description: Tell us what you tested WearMesh on and how it went, problems or not.
+labels: ["compatibility"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Reports from watches and radios we have not tried are what this test is for. A few lines
+        are plenty.
+  - type: input
+    id: version
+    attributes:
+      label: WearMesh version
+      placeholder: 0.1.0 (26)
+    validations:
+      required: true
+  - type: input
+    id: watch
+    attributes:
+      label: Watch and Wear OS version
+      placeholder: Galaxy Watch 7, Wear OS 5
+    validations:
+      required: true
+  - type: input
+    id: radio
+    attributes:
+      label: Radio and firmware
+    validations:
+      required: true
+  - type: checkboxes
+    id: worked
+    attributes:
+      label: What worked
+      options:
+        - label: Pairing and the first sync
+        - label: Live (messages arrived at once)
+        - label: Check-in on time with the screen off
+        - label: Notifications
+        - label: Sending on a channel
+        - label: Direct messages, shown Delivered
+        - label: Tiles and the complication
+  - type: textarea
+    id: battery
+    attributes:
+      label: Battery
+      description: Roughly how much an hour in Live and in Check-in, with Wireless debugging off, if you noticed.
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: What did not work, was confusing, or worked well.

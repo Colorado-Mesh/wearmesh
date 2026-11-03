@@ -3,7 +3,7 @@
 Each release has a section here, headed with its version; the release workflow publishes that
 section as the GitHub Release's notes ([docs/releasing.md](docs/releasing.md)).
 
-## 0.1.0 (not yet released)
+## 0.1.0 (3 November 2026)
 
 The first release, for a few Colorado Mesh testers who sideload. WearMesh is a standalone Wear OS
 client for a MeshCore companion radio over Bluetooth, with no phone needed. It is not affiliated
@@ -26,6 +26,8 @@ with MeshCore.
   crashes, and Diagnostics › Save log puts a copy where `adb pull /sdcard/Download/WearMesh/`
   fetches it. Lines written by an earlier version, or while the switch was on, keep their text:
   tap Diagnostics › Clear log before sharing a log if that matters.
+
+How to install, test and report: [docs/TESTING.md](docs/TESTING.md).
 
 Tested on a Pixel Watch 5 with a Heltec Mesh Node T1 on zephcore firmware and a WisMesh Tag on
 stock MeshCore companion firmware.
