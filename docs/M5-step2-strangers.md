@@ -45,7 +45,25 @@ adb shell run-as org.coloradomesh.wearmesh cat files/wearmesh-log.txt > wearmesh
    fetches it, and it holds the log.
 4. **The old log moved.** The saved log starts with lines from before this version (the old file
    was moved, not lost).
-5. **Alarms.** In Check-in, turn off Alarms & reminders for WearMesh in the watch's settings:
-   Home shows the note and Allow alarms, which opens the setting. Allow it again: the note goes.
+5. **Alarms.** In Check-in, take Alarms & reminders away from WearMesh: Home shows the note and
+   Allow alarms. Give it back: the note goes. On the Pixel Watch 5 the switch in the watch's
+   settings cannot be turned off, so do it with adb, for the app's user ID as well as its package
+   (the user ID's setting wins); Android closes the app when it is taken away:
+
+   ```bash
+   adb shell appops set --uid org.coloradomesh.wearmesh SCHEDULE_EXACT_ALARM deny
+   adb shell appops set org.coloradomesh.wearmesh SCHEDULE_EXACT_ALARM deny
+   # and afterwards, both back:
+   adb shell appops set --uid org.coloradomesh.wearmesh SCHEDULE_EXACT_ALARM allow
+   adb shell appops set org.coloradomesh.wearmesh SCHEDULE_EXACT_ALARM allow
+   adb shell appops get org.coloradomesh.wearmesh SCHEDULE_EXACT_ALARM   # both say allow
+   ```
 6. **A crash** cannot be caused on purpose from the app. If one happens in testing, the saved log
    shows "Crash on thread …" with the stack.
+
+## Results (2 November 2026, Pixel Watch 5, version 25)
+
+Checks 1 to 5 passed. Save log wrote `wearmesh-log-2026-11-02-185347.txt`, which `adb pull`
+fetched; it began with the lines of 1 November from the old `m0-log.txt`, and the check-ins after
+the update ran as before. Those older lines still hold message text, as expected: Clear log
+before sharing a log from a watch that ran an earlier version.
