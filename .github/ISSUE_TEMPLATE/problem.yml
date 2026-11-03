@@ -48,16 +48,16 @@ body:
         - Not sure
     validations:
       required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Before attaching a log
+      description: A file is uploaded as soon as it is dropped in, before the issue is sent, so check this first. Lines written while Diagnostics › Message text in log was on keep their text after it is turned off. If it was ever on, turn it off, tap Clear log, reproduce the problem, then Save log.
+      options:
+        - label: The log I attach holds no message text I mind sharing (Message text in log was off since the log was last cleared), or I attach no log
+          required: true
   - type: textarea
     id: log
     attributes:
       label: Log
       description: Settings › Diagnostics › Save log, then `adb pull /sdcard/Download/WearMesh/`. Drag the file here.
-  - type: checkboxes
-    id: privacy
-    attributes:
-      label: Before attaching the log
-      description: Lines written while Message text in log was on keep their text even after it is turned off. Clear log before reproducing the problem if that matters.
-      options:
-        - label: The log I attach holds no message text I mind sharing (Message text in log was off, the default, or I cleared the log since it was on), or I attach no log
-          required: true

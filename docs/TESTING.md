@@ -29,14 +29,19 @@ Bluetooth off). If the phone app reconnects, WearMesh cannot.
 
 ## Installing
 
-1. **Download** `wearmesh-<version>.apk` and its `.sha256` file from
-   [Releases](https://github.com/Colorado-Mesh/wearmesh/releases). Check the download, in the
-   folder you saved both to; each should say `OK`, or print the same value as the `.sha256` file:
+The commands below use version 0.1.0 as the example. For another release, put its number in
+place of 0.1.0 wherever it appears.
+
+1. **Download** `wearmesh-0.1.0.apk` and `wearmesh-0.1.0.apk.sha256` from
+   [Releases](https://github.com/Colorado-Mesh/wearmesh/releases), and move both into the
+   platform-tools folder, where you run `adb`. (Or leave them where they are and give `adb` the
+   APK's full path in step 6.) Then check the download, from that folder; it should say `OK`, or
+   on Windows print the same value as the `.sha256` file:
 
    ```bash
-   sha256sum -c wearmesh-<version>.apk.sha256          # Linux
-   shasum -a 256 -c wearmesh-<version>.apk.sha256      # macOS
-   certutil -hashfile wearmesh-<version>.apk SHA256    # Windows: compare with the .sha256 file
+   sha256sum -c wearmesh-0.1.0.apk.sha256          # Linux
+   shasum -a 256 -c wearmesh-0.1.0.apk.sha256      # macOS
+   certutil -hashfile wearmesh-0.1.0.apk SHA256    # Windows
    ```
 2. **Show Developer options on the watch**: Settings › System › About › Versions, then tap
    **Build number** seven times. (On a Galaxy Watch it is usually Settings › About watch
@@ -59,10 +64,10 @@ Bluetooth off). If the phone app reconnects, WearMesh cannot.
    adb devices                       # the watch is listed as "device"
    ```
 
-6. **Install**:
+6. **Install**, from the folder with the APK in it:
 
    ```bash
-   adb install -r wearmesh-<version>.apk
+   adb install -r wearmesh-0.1.0.apk
    ```
 
 7. **Turn Wireless debugging off** again when you are done: it roughly doubles the watch's
@@ -138,8 +143,9 @@ The log says what WearMesh did and when. It is the most useful thing to attach.
 contacts, and errors. While Diagnostics › Message text in log is off, which it is unless you turn
 it on (only do that if asked), messages are logged without their text. Lines written while it was
 on keep their text, even after you turn it off, and Save log copies them. So if you ever turned
-it on, tap Diagnostics › **Clear log** before reproducing the problem you report; the log then
-holds only that. Clear log also helps when the log is long.
+it on, or ran a WearMesh from before 0.1.0, first turn **Message text in log** off, then tap
+**Clear log**, then reproduce the problem you report: the log then holds only that, without
+message text. Clear log also helps when the log is long.
 
 ## Known limits
 
