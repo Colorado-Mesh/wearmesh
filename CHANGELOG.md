@@ -3,6 +3,10 @@
 Each release has a section here, headed with its version; the release workflow publishes that
 section as the GitHub Release's notes ([docs/releasing.md](docs/releasing.md)).
 
+## 0.2.0 (not yet released)
+
+- Nothing yet.
+
 ## 0.1.0 (3 November 2026)
 
 The first release, for a few Colorado Mesh testers who sideload. WearMesh is a standalone Wear OS

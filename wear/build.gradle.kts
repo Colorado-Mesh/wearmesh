@@ -18,8 +18,8 @@ android {
         // Releases are 0.1.0, 0.2.0 and so on; between them, the next one with "-dev". The
         // version code counts up by one for every build installed on a watch, release or not.
         // The release workflow checks a tag such as v0.1.0 against versionName.
-        versionCode = 26
-        versionName = "0.1.0"
+        versionCode = 27
+        versionName = "0.2.0-dev"
     }
 
     // Release signing (M5). The key is never in the repository: its path and passwords come
