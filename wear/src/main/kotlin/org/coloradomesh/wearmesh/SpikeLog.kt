@@ -54,6 +54,11 @@ object SpikeLog {
     private val fileStamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
     private val screenStamp = SimpleDateFormat("HH:mm:ss", Locale.US)
 
+    /**
+     * Sets up the log files and loads the saved message-text preference once. Moves the old M0
+     * file if the current file does not exist; a failed move leaves the old file in place.
+     * File access security exceptions propagate.
+     */
     @Synchronized
     fun init(context: Context) {
         if (file != null) return
@@ -67,6 +72,11 @@ object SpikeLog {
         showingText.value = Prefs.of(app).getBoolean(Prefs.LOG_MESSAGE_TEXT, false)
     }
 
+    /**
+     * Adds text to Diagnostics and logcat, and to the current file after [init]. Before appending,
+     * rollover is attempted if the file is larger than [MAX_FILE_BYTES]. File write IO failures are
+     * caught; file access security exceptions propagate.
+     */
     @Synchronized
     fun log(text: String) {
         val now = System.currentTimeMillis()
@@ -84,8 +94,9 @@ object SpikeLog {
     }
 
     /**
-     * Makes [current] the older file and starts a new one. Through a temporary name, so if a rename
-     * fails both files stay as they were and the log simply grows a little longer.
+     * Makes [current] the older file, preserving the existing older file under a temporary name
+     * during the move. If moving [current] fails, attempts to restore the previous older file.
+     * File access security exceptions propagate.
      */
     private fun roll(current: File, old: File) {
         val previous = File(old.parentFile, "$OLD_FILE_NAME.previous")
@@ -111,7 +122,7 @@ object SpikeLog {
     @Synchronized
     fun clock(at: Long): String = screenStamp.format(Date(at))
 
-    /** Writes [error], which [thread] did not catch, to the log, before the app closes. */
+    /** Attempts to write an uncaught [error] from [thread] to the log; failures are caught. */
     fun crash(thread: Thread, error: Throwable) {
         try {
             log(CrashReport.lines(thread.name, error).joinToString("\n"))
@@ -120,7 +131,10 @@ object SpikeLog {
         }
     }
 
-    /** Empties Diagnostics and both files, for a clean test run or before a log is shared. */
+    /**
+     * Clears Diagnostics and attempts to empty the log files. A file IO failure stops further
+     * clearing and is caught; file access security exceptions propagate.
+     */
     @Synchronized
     fun clear() {
         shown.value = emptyList()
@@ -135,7 +149,9 @@ object SpikeLog {
 
     /**
      * Copies the log, older part first, to Download/[SAVE_FOLDER] on the watch, named for the time.
-     * Returns the file's name, or null if it could not be saved. Call off the main thread.
+     * Returns the file's name. Returns null for a read IO failure, a failed or rejected MediaStore
+     * insert, or an exception writing the copy. A file access security exception during the read
+     * can propagate. Call off the main thread.
      */
     fun save(context: Context): String? {
         val name = LogPrivacy.saveName(System.currentTimeMillis())

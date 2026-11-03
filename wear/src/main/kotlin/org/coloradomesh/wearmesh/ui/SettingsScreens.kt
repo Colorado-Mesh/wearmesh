@@ -24,6 +24,7 @@ data class SettingsState(
     val keepContacts: Boolean = false,
 )
 
+/** Settings controls and navigation actions, with radio and permission options shown as needed. */
 @Composable
 fun SettingsScreen(
     state: SettingsState,
@@ -150,7 +151,8 @@ data class NotifyRow(val conversation: String, val title: String, val kind: org.
 /**
  * The log, what is stored, and what the radio last reported. With the log's two controls for
  * testers (M5 step 2): whether message text goes into it, and saving it where adb can fetch it.
- * [saved] is what the last Save log did: the file's name, or an empty string if it failed.
+ * [saved] is the last saved file's name, an empty string on failure, or null when no result is
+ * shown. While [saving], Save log and Clear log are disabled.
  */
 @Composable
 fun DiagnosticsScreen(

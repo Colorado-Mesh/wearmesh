@@ -8,8 +8,8 @@ import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
 
 /**
- * Home: the status line, Check now, every conversation in Home's order (see [HomeRows]), then
- * Radios and Settings.
+ * Home: the status line, Check now, New message, every conversation in Home's order (see
+ * [HomeRows]), then Radios and Settings. When [alarmsNeeded], offers [onAllowAlarms].
  */
 @Composable
 fun HomeScreen(

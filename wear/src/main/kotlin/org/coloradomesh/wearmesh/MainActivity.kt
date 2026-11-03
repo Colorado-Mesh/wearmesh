@@ -814,7 +814,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** This build's version name and code, as Settings › About shows them: "0.1.0 (25)". */
+    /** This build's version name and code, as Settings › About shows them: "0.1.0 (25)"; "?" if the package is not found. */
     private fun appVersion(): String = try {
         val info = packageManager.getPackageInfo(packageName, 0)
         "${info.versionName} (${info.longVersionCode})"
