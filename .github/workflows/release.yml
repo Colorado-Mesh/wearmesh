@@ -116,11 +116,17 @@ jobs:
             echo "::error title=No fingerprint::The release environment has no WEARMESH_CERT_SHA256 variable (docs/releasing.md)."
             exit 1
           fi
+          if ! [[ "$expected" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error title=Not a fingerprint::The release environment's WEARMESH_CERT_SHA256 is \"$EXPECTED_SHA256\", not a SHA-256 fingerprint of 64 hex digits (docs/releasing.md)."
+            exit 1
+          fi
           # The newest build tools on the runner.
           apksigner=$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -name apksigner | sort -V | tail -n 1)
           "$apksigner" verify --print-certs wear/build/outputs/apk/release/wear-release.apk | tee signature.txt
-          # One signer, and it is the release key.
-          digests=$(sed -n 's/^Signer #[0-9]* certificate SHA-256 digest: *//p' signature.txt | tr '[:upper:]' '[:lower:]')
+          # One signer, and it is the release key. apksigner names signers "Signer #1" or, as on
+          # the runner, by signature scheme ("V2 Signer:"); the same certificate under several
+          # schemes counts once.
+          digests=$(sed -n 's/.*certificate SHA-256 digest: *//p' signature.txt | tr '[:upper:]' '[:lower:]' | sort -u | tr '\n' ' ' | sed 's/ *$//')
           if [ "$digests" != "$expected" ]; then
             echo "::error title=Wrong key::The APK is not signed with the release key alone (signer digests: ${digests:-none}; expected $expected)."
             exit 1
