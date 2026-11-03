@@ -52,8 +52,17 @@ The key never goes in the repository (`.gitignore` refuses `*.jks`, `*.keystore`
    since it could not update testers' installs:
 
    ```bash
-   gh variable set WEARMESH_CERT_SHA256 --env release --repo Colorado-Mesh/wearmesh --body "<the SHA256 fingerprint>"
+   keytool -list -v -keystore ~/keys/wearmesh-release.jks -alias wearmesh | sed -n 's/^[[:space:]]*SHA256: //p'
    ```
+
+   prints it after asking for the password, as 32 pairs of hex digits joined by colons
+   (`EB:33:A9:…`). Set the variable to that, the whole line:
+
+   ```bash
+   gh variable set WEARMESH_CERT_SHA256 --env release --repo Colorado-Mesh/wearmesh --body "EB:33:A9:…"
+   ```
+
+   The workflow refuses anything that is not 64 hex digits once the colons are removed.
 
    Only the Release workflow uses the environment, and only for a `v*` tag, so pull requests and
    forks never see the key. Then, in Settings › Rules, add a tag ruleset for `v*` that only you
@@ -84,7 +93,8 @@ The key never goes in the repository (`.gitignore` refuses `*.jks`, `*.keystore`
 4. **Open the next version** in a pull request: `versionName` to `0.2.0-dev`, `versionCode` up by
    one, and a `## 0.2.0 (not yet released)` section at the top of `CHANGELOG.md`.
 
-If a run fails, fix it, delete the tag (`git push --delete origin v0.1.0`, then
+If a run fails, fix it (on `main`, through a pull request, if the workflow or the code needs
+changing), delete the tag (`git push --delete origin v0.1.0`, then
 `git tag -d v0.1.0`), and tag again. Once a release is published and installed by anyone, never
 reuse its version.
 
