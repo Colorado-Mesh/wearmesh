@@ -24,6 +24,7 @@ data class SettingsState(
     val keepContacts: Boolean = false,
 )
 
+/** Settings controls and navigation actions, with radio and permission options shown as needed. */
 @Composable
 fun SettingsScreen(
     state: SettingsState,
@@ -37,6 +38,7 @@ fun SettingsScreen(
     onAllowNotifications: () -> Unit,
     onReadEverything: () -> Unit,
     onDiagnostics: () -> Unit,
+    onAbout: () -> Unit,
     onQuit: () -> Unit,
 ) {
     ScreenList {
@@ -93,7 +95,8 @@ fun SettingsScreen(
                 ) { onReadEverything() }
             }
         }
-        item { WideChip("Diagnostics", secondary = true) { onDiagnostics() } }
+        item { WideChip("Diagnostics", detail = "The log, and saving it", secondary = true) { onDiagnostics() } }
+        item { WideChip("About WearMesh", secondary = true) { onAbout() } }
         item {
             WideChip(
                 "Quit WearMesh",
@@ -145,11 +148,47 @@ fun ComplicationScreen(channels: List<Pair<String, String>>?, chosen: String?, o
 /** A conversation's line on the Notifications screen. */
 data class NotifyRow(val conversation: String, val title: String, val kind: org.coloradomesh.wearmesh.notify.NotifyRules.Kind, val on: Boolean)
 
-/** The log, what is stored, and what the radio last reported. */
+/**
+ * The log, what is stored, and what the radio last reported. With the log's two controls for
+ * testers (M5 step 2): whether message text goes into it, and saving it where adb can fetch it.
+ * [saved] is the last saved file's name, an empty string on failure, or null when no result is
+ * shown. While [saving], Save log and Clear log are disabled.
+ */
 @Composable
-fun DiagnosticsScreen(link: SpikeState.Snapshot, counts: StoreCounts?, lines: List<SpikeLog.Line>, onClearLog: () -> Unit) {
+fun DiagnosticsScreen(
+    link: SpikeState.Snapshot,
+    counts: StoreCounts?,
+    lines: List<SpikeLog.Line>,
+    showText: Boolean,
+    saving: Boolean,
+    saved: String?,
+    onShowText: () -> Unit,
+    onSaveLog: () -> Unit,
+    onClearLog: () -> Unit,
+) {
     ScreenList {
         item { ListHeader { Text("Diagnostics") } }
+        item {
+            WideChip(
+                "Message text in log",
+                detail = if (showText) "Shown. Tap to hide it from now on" else "Hidden: who and when only. Tap to show",
+                secondary = !showText,
+                detailLines = 2,
+            ) { onShowText() }
+        }
+        item {
+            WideChip(
+                if (saving) "Saving the log…" else "Save log",
+                detail = "To Download/${SpikeLog.SAVE_FOLDER}, for adb pull",
+                secondary = true,
+                enabled = !saving,
+            ) { onSaveLog() }
+        }
+        when {
+            saved == null -> {}
+            saved.isEmpty() -> item { Note("The log could not be saved.") }
+            else -> item { Note("Saved as $saved. On a computer: adb pull /sdcard/Download/${SpikeLog.SAVE_FOLDER}/") }
+        }
         item {
             val facts = listOfNotNull(
                 link.radioName?.let { "Radio $it" },
@@ -173,8 +212,32 @@ fun DiagnosticsScreen(link: SpikeState.Snapshot, counts: StoreCounts?, lines: Li
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-        item { WideChip("Clear log", secondary = true) { onClearLog() } }
+        item { WideChip("Clear log", secondary = true, enabled = !saving) { onClearLog() } }
     }
 }
 
 private const val SHOWN_LOG_LINES = 80
+
+/**
+ * Settings › About (M5 step 2): what testers report and where the code is. [radio] is the radio
+ * in use's name, [model] and [firmware] as it last reported them; each is null until known.
+ */
+@Composable
+fun AboutScreen(version: String, radio: String?, model: String?, firmware: String?) {
+    ScreenList {
+        item { ListHeader { Text("About") } }
+        item { Note("WearMesh $version") }
+        item {
+            Note(
+                if (radio == null) {
+                    "No radio chosen"
+                } else {
+                    listOfNotNull("Radio: $radio", model, firmware?.let { "Firmware $it" }).joinToString("\n")
+                },
+            )
+        }
+        item { Note("A MeshCore client for Wear OS, from Colorado Mesh (coloradomesh.org). Not affiliated with MeshCore.") }
+        item { Note("Free software under the GNU GPL, version 3. Source: github.com/Colorado-Mesh/wearmesh") }
+        item { Note("To report a problem, open an issue there, with the log from Diagnostics › Save log.") }
+    }
+}

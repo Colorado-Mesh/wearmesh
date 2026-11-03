@@ -53,7 +53,7 @@ object Radios {
             .putString(Prefs.RADIOS, KnownRadios.format(known))
         if (switching) {
             // Its next sync brings what queued while it was not in use: stored, but not notified.
-            edit.remove(Prefs.SELF_NAME).remove(Prefs.LAST_SYNC_AT).putString(Prefs.QUIET_SYNC_RADIO, radio.address)
+            edit.remove(Prefs.SELF_NAME).remove(Prefs.LAST_SYNC_AT).remove(Prefs.RADIO_MODEL).remove(Prefs.RADIO_FIRMWARE).putString(Prefs.QUIET_SYNC_RADIO, radio.address)
             Glances.forgetRadioStatus(edit)
             SyncStatus.reset()
         }
@@ -71,6 +71,7 @@ object Radios {
             val edit = prefs.edit().putString(Prefs.RADIOS, KnownRadios.format(known)).remove(Prefs.COMPLICATION_CHANNEL + address)
             if (prefs.getString(Prefs.RADIO_ADDRESS, null) == address) {
                 edit.remove(Prefs.RADIO_ADDRESS).remove(Prefs.RADIO_NAME).remove(Prefs.SELF_NAME).remove(Prefs.LAST_SYNC_AT)
+                    .remove(Prefs.RADIO_MODEL).remove(Prefs.RADIO_FIRMWARE)
                 Glances.forgetRadioStatus(edit)
                 SyncStatus.reset()
                 inUse = true

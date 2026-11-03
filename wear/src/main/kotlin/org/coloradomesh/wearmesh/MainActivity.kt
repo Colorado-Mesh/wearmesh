@@ -30,10 +30,12 @@ import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.navigation.SwipeDismissableNavHost
 import androidx.wear.compose.navigation.composable
 import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.coloradomesh.meshcore.ble.FoundRadio
 import org.coloradomesh.meshcore.ble.RadioScanner
@@ -43,6 +45,7 @@ import org.coloradomesh.wearmesh.glance.Glances
 import org.coloradomesh.wearmesh.glance.WearMeshTileService
 import org.coloradomesh.wearmesh.notify.Notifier
 import org.coloradomesh.wearmesh.notify.NotifyRules
+import org.coloradomesh.wearmesh.ui.AboutScreen
 import org.coloradomesh.wearmesh.ui.ComplicationScreen
 import org.coloradomesh.wearmesh.ui.ConfirmScreen
 import org.coloradomesh.wearmesh.ui.ConversationScreen
@@ -461,9 +464,11 @@ class MainActivity : ComponentActivity() {
                     checkNowEnabled = !link.running && !sync.syncing,
                     // Once, after Live has first connected.
                     offerCheckIn = mode == Mode.Kind.LIVE && !offerAnswered && link.running && link.link == "Connected",
+                    alarmsNeeded = mode == Mode.Kind.CHECK_IN && !exactAlarmsAllowed,
                     onCheckNow = { withPermissions { CheckIn.now(this@MainActivity) } },
                     onNewMessage = { nav.navigate(NEW_MESSAGE) },
                     onOfferAnswered = { switch -> answerOffer(switch) },
+                    onAllowAlarms = { openSettingsPage(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, withPackage = true) },
                     onOpen = { row -> openConversation(row.conversation, row.title) },
                     onRadios = { nav.navigate(RADIOS) },
                     onSettings = { nav.navigate(SETTINGS) },
@@ -735,6 +740,7 @@ class MainActivity : ComponentActivity() {
                         goHome()
                     },
                     onDiagnostics = { nav.navigate(DIAGNOSTICS) },
+                    onAbout = { nav.navigate(ABOUT) },
                     onQuit = { quit() },
                 )
             }
@@ -768,9 +774,52 @@ class MainActivity : ComponentActivity() {
             composable(DIAGNOSTICS) {
                 val counts by Storage.counts.collectAsStateWithLifecycle()
                 val lines by SpikeLog.lines.collectAsStateWithLifecycle()
-                DiagnosticsScreen(link = link, counts = counts, lines = lines, onClearLog = { SpikeLog.clear() })
+                val showText by SpikeLog.showText.collectAsStateWithLifecycle()
+                var saving by remember { mutableStateOf(false) }
+                var saved by remember { mutableStateOf<String?>(null) }
+                DiagnosticsScreen(
+                    link = link,
+                    counts = counts,
+                    lines = lines,
+                    showText = showText,
+                    saving = saving,
+                    saved = saved,
+                    onShowText = { SpikeLog.setShowText(this@MainActivity, !showText) },
+                    onSaveLog = {
+                        saving = true
+                        lifecycleScope.launch {
+                            saved = withContext(Dispatchers.IO) { SpikeLog.save(this@MainActivity) }.orEmpty()
+                            saving = false
+                        }
+                    },
+                    // Not while a save runs: it has copied the log already, so its file would keep what was cleared.
+                    onClearLog = {
+                        if (!saving) {
+                            SpikeLog.clear()
+                            saved = null
+                        }
+                    },
+                )
+            }
+
+            composable(ABOUT) {
+                val prefs = Prefs.of(this@MainActivity)
+                AboutScreen(
+                    version = remember { appVersion() },
+                    radio = radios?.chosen?.let { chosen -> prefs.getString(Prefs.SELF_NAME, null) ?: chosen.name },
+                    model = prefs.getString(Prefs.RADIO_MODEL, null),
+                    firmware = prefs.getString(Prefs.RADIO_FIRMWARE, null) ?: link.firmware,
+                )
             }
         }
+    }
+
+    /** This build's version name and code, as Settings › About shows them: "0.1.0 (25)"; "?" if the package is not found. */
+    private fun appVersion(): String = try {
+        val info = packageManager.getPackageInfo(packageName, 0)
+        "${info.versionName} (${info.longVersionCode})"
+    } catch (e: PackageManager.NameNotFoundException) {
+        "?"
     }
 
     /** The current time, moved on every 30 s so "4 min" ages while a screen is open. */
@@ -798,6 +847,7 @@ class MainActivity : ComponentActivity() {
         const val FORGOTTEN = "forgotten"
         const val SETTINGS = "settings"
         const val DIAGNOSTICS = "diagnostics"
+        const val ABOUT = "about"
         const val NOTIFICATIONS = "notifications"
         const val COMPLICATION = "complication"
         const val REPLY = "reply"

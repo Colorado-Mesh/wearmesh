@@ -63,6 +63,13 @@ object Prefs {
     const val RADIO_MILLIVOLTS = "radio_millivolts"
     const val RADIO_MILLIVOLTS_AT = "radio_millivolts_at"
 
+    /** Whether message text goes into the log (Diagnostics › Message text in log); off unless turned on. */
+    const val LOG_MESSAGE_TEXT = "log_message_text"
+
+    /** The radio in use's model and firmware, as it last reported them; for Settings › About. */
+    const val RADIO_MODEL = "radio_model"
+    const val RADIO_FIRMWARE = "radio_firmware"
+
     /** Why the last sync failed; removed when one works. For the Status tile. */
     const val LAST_PROBLEM = "last_problem"
 
