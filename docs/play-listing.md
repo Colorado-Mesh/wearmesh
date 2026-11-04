@@ -24,7 +24,7 @@ factor with its own tracks ("Wear OS only").
 > • Reply with quick replies, dictation or the keyboard, from the app or a notification. Direct messages show when they are delivered.
 > • Start a message to a favourite, a recent contact or a channel.
 > • Two tiles: your newest messages with Reply, and the link's status with Check now.
-> • A complication with your unread count, for all conversations or one channel.
+> • A complication with your unread count: across the conversations that notify you, or for one channel you choose.
 > • A message's signal strength and hop count.
 >
 > You need a MeshCore companion radio on Bluetooth (BLE) companion firmware, set up with the MeshCore app first: WearMesh reads the radio's channels and contacts, and does not change its settings. A radio talks to one device at a time, so disconnect the phone app first.
