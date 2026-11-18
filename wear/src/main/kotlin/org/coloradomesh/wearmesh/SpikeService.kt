@@ -105,6 +105,9 @@ class SpikeService : Service() {
                 stopping = false
                 reconnects = 0
                 address = target
+                // Its close is ignored once the next session opens (a new generation), so note it
+                // here: the watch may still list this link for a moment.
+                if (session != null) SharedLink.ownClosed()
                 session?.close()
                 session = null
                 recorder?.finish()
@@ -153,6 +156,9 @@ class SpikeService : Service() {
 
     private fun openSession() {
         val target = address ?: return
+        // A new generation before anything else, so a link this replaces (the last radio's, when
+        // switching) is ignored when it reports closing, even if this one doesn't open below.
+        val mine = ++generation
         // Another app on this watch holding the radio would have its link joined, not a new one
         // made (see SharedLink).
         if (SharedLink.watchConnectedTo(this, target)) {
@@ -166,7 +172,6 @@ class SpikeService : Service() {
             scheduleReconnect(SharedLink.IN_USE)
             return
         }
-        val mine = ++generation
         contactsSeen = 0
         val store = Storage.store(this, target)
         // Queued ahead of everything this session writes.
