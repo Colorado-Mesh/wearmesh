@@ -27,6 +27,12 @@ minutes the first time.
 app from the radio before using WearMesh (in the phone app, disconnect, or turn the phone's
 Bluetooth off). If the phone app reconnects, WearMesh cannot.
 
+Another app on the watch, such as the WearTAK MeshCore plugin, is different: Android shares one
+Bluetooth connection between the apps on a watch, so WearMesh could join that app's link and the
+two apps' traffic would mix. WearMesh doesn't: if the watch is already connected to the radio,
+Live shows **In use by another app on this watch** and tries again later, and a check-in is
+skipped with that as its problem. Turn the other app off first.
+
 ## Installing
 
 The commands below use version 0.1.0 as the example. For another release, put its number in
