@@ -14,6 +14,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.coloradomesh.meshcore.ble.RadioSession
@@ -136,6 +137,20 @@ object CheckInRun {
         }
         if (ContextCompat.checkSelfPermission(app, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
             SpikeLog.log("Check-in ($why): skipped, Bluetooth permission not granted")
+            return
+        }
+        // Another app on this watch holding the radio would have its link joined, not a new one
+        // made (see SharedLink). A connection just after WearMesh's own close may be its own.
+        var inUse = SharedLink.watchConnectedTo(app, address)
+        while (inUse && SharedLink.ownLinkMayLinger()) {
+            delay(SharedLink.RECHECK_MS)
+            inUse = SharedLink.watchConnectedTo(app, address)
+        }
+        if (inUse) {
+            SpikeLog.log("Check-in ($why): skipped, the radio is in use by another app on this watch")
+            SyncStatus.started()
+            SyncStatus.finished(app, address, SharedLink.IN_USE)
+            Glances.refresh(app)
             return
         }
         val started = SystemClock.elapsedRealtime()
@@ -335,6 +350,7 @@ object CheckInRun {
             // Also when the system stops the job: a link left open would keep the radio busy,
             // locking out the Live link and the next check-in.
             session.close()
+            SharedLink.ownClosed()
             withContext(NonCancellable) {
                 if (withTimeoutOrNull(CLOSE_WAIT_MS) { closed.await() } == null) {
                     SpikeLog.log("Check-in: the link did not report closing within ${CLOSE_WAIT_MS / 1000} s")

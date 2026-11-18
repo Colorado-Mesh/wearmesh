@@ -105,6 +105,9 @@ class SpikeService : Service() {
                 stopping = false
                 reconnects = 0
                 address = target
+                // Its close is ignored once the next session opens (a new generation), so note it
+                // here: the watch may still list this link for a moment.
+                if (session != null) SharedLink.ownClosed()
                 session?.close()
                 session = null
                 recorder?.finish()
@@ -139,6 +142,7 @@ class SpikeService : Service() {
 
     override fun onDestroy() {
         stopping = true
+        if (session != null) SharedLink.ownClosed()
         session?.close()
         session = null
         recorder?.finish()
@@ -152,7 +156,22 @@ class SpikeService : Service() {
 
     private fun openSession() {
         val target = address ?: return
+        // A new generation before anything else, so a link this replaces (the last radio's, when
+        // switching) is ignored when it reports closing, even if this one doesn't open below.
         val mine = ++generation
+        // Another app on this watch holding the radio would have its link joined, not a new one
+        // made (see SharedLink).
+        if (SharedLink.watchConnectedTo(this, target)) {
+            if (SharedLink.ownLinkMayLinger()) {
+                // Probably WearMesh's own link (a check-in's, or Live's last), just closed.
+                main.postDelayed(reconnectTimer, SharedLink.RECHECK_MS)
+                return
+            }
+            SpikeLog.log("Live: the radio is in use by another app on this watch")
+            releaseWakeLock()
+            scheduleReconnect(SharedLink.IN_USE)
+            return
+        }
         contactsSeen = 0
         val store = Storage.store(this, target)
         // Queued ahead of everything this session writes.
@@ -277,6 +296,7 @@ class SpikeService : Service() {
 
     private fun linkClosed(reason: String) {
         session = null
+        SharedLink.ownClosed()
         releaseWakeLock()
         recorder?.finish()
         recorder = null
@@ -291,13 +311,19 @@ class SpikeService : Service() {
             finish()
             return
         }
+        scheduleReconnect(null)
+    }
+
+    /** Tries the link again after the next pause; [why] is shown with it when it isn't a lost link. */
+    private fun scheduleReconnect(why: String?) {
         val pause = (RECONNECT_FIRST_MS shl reconnects.coerceAtMost(4)).coerceAtMost(RECONNECT_MAX_MS)
         reconnects++
         SpikeLog.log("Live: reconnecting in ${pause / 1000} s (try $reconnects)")
-        SpikeState.update { it.copy(link = "Reconnecting in ${pause / 1000} s", packetSize = null) }
+        val state = if (why == null) "Reconnecting in ${pause / 1000} s" else "$why; trying again in ${pause / 1000} s"
+        SpikeState.update { it.copy(link = state, packetSize = null) }
         // So the tiles stop saying Connected. Once per reconnect, which backs off to minutes.
         Glances.refresh(this)
-        goForeground("Link lost; reconnecting")
+        goForeground(if (why == null) "Link lost; reconnecting" else why)
         main.postDelayed(reconnectTimer, pause)
         val alarms = getSystemService(AlarmManager::class.java)
         val at = SystemClock.elapsedRealtime() + pause
